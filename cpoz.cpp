@@ -3,18 +3,18 @@
 // Copyright(c) 2019 Mark Whitney
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this softwareand associated documentation files(the "Software"), to deal
+// of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and /or sell
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 // copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions :
+// furnished to do so, subject to the following conditions:
 // 
 // The above copyright noticeand this permission notice shall be included in all
 // copies or substantial portions of the Software.
 // 
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
@@ -32,54 +32,69 @@ const double EPS = 0.01;
 CameraHelper cam;
 
 
-void landmark_test(
-    const XYZLandmark& lm1,
-    const XYZLandmark& lm2,
+bool landmark_test(
+    XYZLandmark& lm1,
+    XYZLandmark& lm2,
     const cv::Vec3d& cam_xyz,
-    const cv::Vec2d& cam_angs)
+    const cv::Vec2d& cam_angs_rad,
+    cv::Vec2d& pos_xz,
+    double& world_azim)
 {
-    // for the two landmarks :
+    // for the two landmarks:
     // - translate landmark by camera offset
     // - rotate by azimuth and elevation
     // - project into image
     
-    double azim = cam_angs[0];
-    double elev = cam_angs[1];
+    double azim = cam_angs_rad[0];
+    double elev = cam_angs_rad[1];
     
     // determine pixel location of fixed LM 1
     cv::Vec3d xyz1 = lm1.xyz - cam_xyz;
-    cv::Vec3d xyz1_rot = calc_xyz_after_rotation_deg(xyz1, elev, azim, 0);
+    cv::Vec3d xyz1_rot = calc_xyz_after_rotation(xyz1, elev, azim, 0);
     cv::Vec2d uv1 = cam.project_xyz_to_uv(xyz1_rot);
 
-    // determine pixel location of left / right LM
+    // determine pixel location of left/right LM
     cv::Vec3d xyz2 = lm2.xyz - cam_xyz;
-    cv::Vec3d xyz2_rot = calc_xyz_after_rotation_deg(xyz2, elev, azim, 0);
+    cv::Vec3d xyz2_rot = calc_xyz_after_rotation(xyz2, elev, azim, 0);
     cv::Vec2d uv2 = cam.project_xyz_to_uv(xyz2_rot);
 
+    // dump the U,V points and perform visibility check
+    std::cout << std::endl;
+    std::cout << "Image Landmark 1:  " << uv1 << std::endl;
+    std::cout << "Image Landmark 2:  " << uv2 << std::endl;
     if (cam.is_visible(uv1) && cam.is_visible(uv2))
     {
-        // all good
+        std::cout << "Both landmarks are visible." << std::endl;
     }
     else
     {
-        //print
-        //print "Image Landmark //1:", uv1
-        //print "Image Landmark //2:", uv2
-        //print "At least one landmark is NOT visible!"
+        std::cout << "At least one landmark is NOT visible!" << std::endl;
+        return false;
         //return False, 0., 0., 0.
     }
     
-    //
-    //// all is well so proceed with test...
-    //
-    //// landmarks have been acquired
-    //// camera elevation and world Y also need updating
-    //cam.elev = _ele * pu.DEG2RAD
-    //cam.world_y = _y
-    //
-    //lm1.set_current_uv(uv1)
-    //lm2.set_current_uv(uv2)
-    //world_x, world_z, world_azim = cam.triangulate_landmarks(lm1, lm2)
+    // all is well so proceed with test...
+
+    // landmarks have been acquired
+    // camera elevation and world Y also need updating
+    cam.elev = elev;
+    cam.world_y = cam_xyz[1];
+
+    lm1.set_current_uv(uv1);
+    lm2.set_current_uv(uv2);
+
+    double r;
+    double ang;
+    double rel_azim;
+    cam.triangulate(lm1.xyz, lm2.xyz, uv1, uv2, r, ang, rel_azim);
+
+    // landmark has angle offset info
+    // which is used to calculate world coords and azim
+    double u2 = lm2.uv[0];
+    world_azim = lm1.calc_world_azim(u2, ang, rel_azim);
+    pos_xz = lm1.calc_world_xz(u2, ang, r);
+
+    std::cout << "Robot is at: [" << pos_xz[0] << ", " << pos_xz[1] << "] @ " << world_azim * RAD2DEG << std::endl;
     //
     //// this integer coordinate stuff is disabled for now...
     //if False:
@@ -89,81 +104,93 @@ void landmark_test(
     //print lm1.uv
     //print lm2.uv
     //
-    //world_x, world_z, world_azim = cam.triangulate_landmarks(lm1, lm2)
-    //print "Robot is at", world_x, world_z, world_azim * pu.RAD2DEG
-    //print
-    //
-    //return True, world_x, world_z, world_azim * pu.RAD2DEG
+    return true;
 }
 
 
 
-bool room_test(
+void room_test(
     const tMapStrToAZEL& lm_vis,
-    const cv::Vec3d& xyz,
-    const std::string& lm_name,
+    const cv::Vec3d& known_cam_xyz,
+    const std::string& lm_map_name,
     const double elev_offset = 0.0)
 {
-    bool result = true;
+    std::cout << std::endl;
+    std::cout << "------------------------------------------" << std::endl;
+    std::cout << "ROOM TEST ";
+    std::cout << lm_map_name << ", " << known_cam_xyz;
+    std::cout << ", " << elev_offset << std::endl;
+    
     for (const auto& r : lm_vis)
     {
-        double cam_azim = r.second.azim;
-        double cam_elev = r.second.elev + elev_offset;
-        cv::Vec2d angs = { cam_azim, cam_elev };
+        double cam_azim_deg = r.second[0];
+        double cam_elev_deg = r.second[1] + elev_offset;
+        cv::Vec2d cam_angs_rad = { cam_azim_deg * DEG2RAD, cam_elev_deg * DEG2RAD };
 
-        tMapStrToXYZRL& lm_map = all_landmarks[lm_name];
+        tMapStrToXYZRL& markx = all_landmark_maps[lm_map_name];
 
-        bool flag = false;
-        double x = 0;
-        double z = 0;
-        double a = 0;
+        cv::Vec2d pos_xz;
+        double world_azim;
 
-//        flag, x, z, a = landmark_test(mark1[key], markx[key], xyz, angs);
-        
+        const std::string& rkey = r.first;
+        XYZLandmark lm1(mark1[rkey].xyz, mark1[rkey].adj_R, mark1[rkey].adj_L);
+        XYZLandmark lm2(markx[rkey].xyz, markx[rkey].adj_R, markx[rkey].adj_L);
+
+        bool result = true;
+        bool flag = landmark_test(lm1, lm2, known_cam_xyz, cam_angs_rad, pos_xz, world_azim);
+
         if (!flag)
         {
             result = false;
         }
 
-        if (abs(x - xyz[0]) >= EPS)
+        if (abs(pos_xz[0] - known_cam_xyz[0]) >= EPS)
         {
             result = false;
         }
 
-        if (abs(z - xyz[2]) >= EPS)
+        if (abs(pos_xz[1] - known_cam_xyz[2]) >= EPS)
         {
             result = false;
         }
 
-        if ((abs(a - cam_azim) >= EPS) && (abs(a - 360.0 - cam_azim) >= EPS))
+        world_azim *= RAD2DEG;
+        if ((abs(world_azim - cam_azim_deg) >= EPS) && (abs(world_azim - 360.0 - cam_azim_deg) >= EPS))
         {
             result = false;
+        }
+
+        if (result)
+        {
+            std::cout << "PASS!!!" << std::endl;
         }
     }
-    
-    return result;
 }
 
 
+void test_room1()
+{
+    {
+        // LM name mapped to[world_azim, elev] for visibility at world(1, 1)
+        // has one case where one landmark is not visible
+        cv::Vec3d xyz = { 1.0, -2.0, 1.0 };
+        room_test(lm_vis_1_1, xyz, "mark2");
+    }
 
-//class TestUtil(unittest.TestCase) :
-//
-//    def test_room_x1_z1_y2_lm2_elev00(self) :
-//    // LM name mapped to[world_azim, elev] for visibility at world(1, 1)
-//    // has one case where one landmark is not visible
-//    xyz = [1., -2., 1.]
-//    self.assertFalse(room_test(lm_vis_1_1, xyz, "mark2"))
-//
-//    def test_room_x1_z1_y2_lm3_elev00(self):
-//        // LM name mapped to[world_azim, elev] for visibility at world(1, 1)
-//            xyz = [1., -2., 1.]
-//            self.assertTrue(room_test(lm_vis_1_1, xyz, "mark3"))
-//
-//            def test_room_x1_z1_y2_lm2_elev10(self) :
-//            // LM name mapped to[world_azim, elev] for visibility at world(1, 1)
-//            // camera is at(1, 1) and -2 units high, elevation offset 10 degrees
-//            xyz = [1., -2., 1.]
-//            self.assertTrue(room_test(lm_vis_1_1, xyz, "mark2", elev_offset = 10.0))
+    {
+        // LM name mapped to[world_azim, elev] for visibility at world(1, 1)
+        cv::Vec3d xyz = { 1.0, -2.0, 1.0 };
+        room_test(lm_vis_1_1, xyz, "mark3");
+    }
+
+    {
+        // LM name mapped to[world_azim, elev] for visibility at world(1, 1)
+        // camera is at(1, 1) and -2 units high, elevation offset 10 degrees
+        cv::Vec3d xyz = { 1.0, -2.0, 1.0 };
+        room_test(lm_vis_1_1, xyz, "mark2", 10.0);
+    }
+}
+
 //
 //            def test_room_x1_z1_y2_lm3_elev10(self) :
 //            // LM name mapped to[world_azim, elev] for visibility at world(1, 1)
@@ -192,11 +219,11 @@ bool room_test(
 //            xyz = [7., -2., 6.]
 //            self.assertTrue(room_test(lm_vis_7_6, xyz, "mark3"))
 //
-//
 
 
 
 int main()
 {
-    std::cout << "CPOZ Test Application\n";
+    std::cout << "CPOZ Test Application" << std::endl;
+    test_room1();
 }
