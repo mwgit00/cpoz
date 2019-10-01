@@ -25,9 +25,9 @@
 
 #include "room1.h"
 
-// 10x16 "room" with 3x9 "alcove"
-// with landmarks at some corners
-// asterisks are secondary landmarks
+// this file contains data that defines landmarks in an imaginary room
+// it is a 10x16 "room" with 3x9 "alcove" with landmarks at some corners
+// the asterisks show the locations of secondary landmarks
 // landmark C is in a 135 degree corner (instead of typical 90 degrees)
 //
 // +Z
@@ -128,5 +128,3 @@ tMapStrToAZEL lm_vis_7_6 =
     {"D", {135.0, 30.0}},
     {"E", {45.0, 60.0}},
     {"F", {90.0, 60.}}};
-
-

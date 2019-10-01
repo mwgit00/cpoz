@@ -23,91 +23,100 @@
 #ifndef CAMERA_HELPER_H_
 #define CAMERA_HELPER_H_
 
-#include "cpoz_def.h"
+#include <opencv2/imgproc.hpp>
 
-// camera convention
-//
-// 0 -------- - +X -->
-// |           |
-// |  (cx,cy)  |
-// |           |
-// +Y --------- (w,h)
-// |
-// V
-//
-// right-hand rule for Z
-// -Z is pointing into camera, +Z is pointing away from camera
-// +X (fingers) cross +Y (palm) will make +Z (thumb) point away from camera
-//
-// positive elevation is clockwise rotation around X (axis pointing "out")
-// positive azimuth is clockwise rotation around Y (axis pointing "out")
-// +elevation TO point (U,V) is UP
-// +azimuth TO point (U,V) is RIGHT
-//
-// robot camera is always "looking" in its +Z direction
-// so its world azimuth is 0 when robot is pointing in +Z direction
-// since that is when the two coordinate systems line up
-//
-// world location is in X,Z plane
-// normally the +X axis in X,Z plane would be an angle of 0
-// but there is a 90 degree rotation between X,Z and world azimuth
-//
-// roll,pitch,yaw is also phi,theta,psi
-//
-// https://www.learnopencv.com/rotation-matrix-to-euler-angles/
-// rotation about Z,Y,X is yaw,pitch,roll respectively
-
-
-class CameraHelper
+namespace cpoz
 {
-public:
-    
-    CameraHelper();
-    virtual ~CameraHelper();
+    // camera convention
+    //
+    // 0 -------- - +X -->
+    // |           |
+    // |  (cx,cy)  |
+    // |           |
+    // +Y --------- (w,h)
+    // |
+    // V
+    //
+    // right-hand rule for Z
+    // -Z is pointing into camera, +Z is pointing away from camera
+    // +X (fingers) cross +Y (palm) will make +Z (thumb) point away from camera
+    //
+    // positive elevation is clockwise rotation around X (axis pointing "out")
+    // positive azimuth is clockwise rotation around Y (axis pointing "out")
+    // +elevation TO point (U,V) is UP
+    // +azimuth TO point (U,V) is RIGHT
+    //
+    // robot camera is always "looking" in its +Z direction
+    // so its world azimuth is 0 when robot is pointing in +Z direction
+    // since that is when the two coordinate systems line up
+    //
+    // world location is in X,Z plane
+    // normally the +X axis in X,Z plane would be an angle of 0
+    // but there is a 90 degree rotation between X,Z and world azimuth
+    //
+    // roll,pitch,yaw is also phi,theta,psi
+    //
+    // https://www.learnopencv.com/rotation-matrix-to-euler-angles/
+    // "The industry standard is Z-Y-X because that corresponds to yaw, pitch and roll."
 
-    // test if pixel at (u, v) is within valid range.
-    bool is_visible(const cv::Vec2d& rUV) const;
+    class CameraHelper
+    {
+    public:
 
-    // project 3D world point to image plane
-    cv::Vec2d project_xyz_to_uv(const cv::Vec3d& rXYZ);
+        CameraHelper();
+        virtual ~CameraHelper();
 
-    // calculate azimuth (radians) and elevation (radians) to image point
-    cv::Vec2d calc_azim_elev(const cv::Vec2d& rUV);
+        static cv::Mat calc_axes_rotation_mat(const double roll, const double pitch, const double yaw);
+        static cv::Vec3d calc_xyz_after_rotation(const cv::Vec3d& xyz_pos, const double roll, const double pitch, const double yaw);
 
-    // calculate camera-relative X,Y,Z vector to point in image
-    cv::Vec3d calc_rel_xyz_to_pixel(
-        const double known_Y,
-        const cv::Vec2d& rUV,
-        const double cam_elev_rad);
+        // test if pixel at (u, v) is within valid range.
+        bool is_visible(const cv::Vec2d& rUV) const;
 
-    // Use sightings of real world X,Y,Z and corresponding U,V
-    // to perform triangulation.  Convert angle and range
-    // from triangulation into world coordinates based
-    // on fixed landmark's known orientation in world.
-    void triangulate(
-        const cv::Vec3d& rXYZ1,
-        const cv::Vec3d& rXYZ2,
-        const cv::Vec2d& rUV1,
-        const cv::Vec2d& rUV2,
-        double& range,
-        double& angle,
-        double& rel_azim);
+        // project 3D world point to image plane
+        cv::Vec2d project_xyz_to_uv(const cv::Vec3d& rXYZ);
 
-public:
+        // calculate azimuth (radians) and elevation (radians) to image point
+        cv::Vec2d calc_azim_elev(const cv::Vec2d& rUV);
 
-    // TODO -- make it accept OpenCV intrinsic camera calib matrix
-    // these must be updated prior to triangulation
-    double world_y;
-    double elev;
+        // calculate camera-relative X,Y,Z vector to point in image
+        cv::Vec3d calc_rel_xyz_to_pixel(
+            const double known_Y,
+            const cv::Vec2d& rUV,
+            const double cam_elev_rad);
 
-    // arbitrary test params
-    cv::Size img_sz;
-    double cx;
-    double cy;
-    double fx;
-    double fy;
+        // Use sightings of real world X,Y,Z and corresponding U,V to perform triangulation.
+        // param: rXYZ1 reference to real-world location 1
+        // param: rXYZ2 reference to real-world location 2
+        // param: rUV1 reference to pixel coords for XYZ1
+        // param: rUV2 reference to pixel coords for XYZ2
+        // param: range X,Z plane ground range from camera to XYZ1
+        // param: loc_angle angle about XYZ1 from XYZ2 to camera XYZ from Law-of-Cosines
+        // param: rel_azim azimuth angle of XYZ1 relative to camera
+        void triangulate(
+            const cv::Vec3d& rXYZ1,
+            const cv::Vec3d& rXYZ2,
+            const cv::Vec2d& rUV1,
+            const cv::Vec2d& rUV2,
+            double& range,
+            double& loc_angle,
+            double& rel_azim);
 
-    cv::Mat calib;
-};
+    public:
+
+        // TODO -- make it accept OpenCV intrinsic camera calib matrix
+        // these must be updated prior to triangulation
+        double world_y;     // known camera height
+        double elev;        // known camera elevation (radians)
+
+        // arbitrary test params
+        cv::Size img_sz;
+        double cx;
+        double cy;
+        double fx;
+        double fy;
+
+        cv::Mat calib;
+    };
+}
 
 #endif // CAMERA_HELPER_H_

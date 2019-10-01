@@ -29,12 +29,12 @@
 
 const double EPS = 0.01;
 
-CameraHelper cam;
+cpoz::CameraHelper cam;
 
 
 bool landmark_test(
-    XYZLandmark& lm1,
-    XYZLandmark& lm2,
+    cpoz::XYZLandmark& lm1,
+    cpoz::XYZLandmark& lm2,
     const cv::Vec3d& cam_xyz,
     const cv::Vec2d& cam_angs_rad,
     cv::Vec2d& pos_xz,
@@ -50,12 +50,12 @@ bool landmark_test(
     
     // determine pixel location of fixed LM 1
     cv::Vec3d xyz1 = lm1.xyz - cam_xyz;
-    cv::Vec3d xyz1_rot = calc_xyz_after_rotation(xyz1, elev, azim, 0);
+    cv::Vec3d xyz1_rot = cam.calc_xyz_after_rotation(xyz1, elev, azim, 0);
     cv::Vec2d uv1 = cam.project_xyz_to_uv(xyz1_rot);
 
     // determine pixel location of left/right LM
     cv::Vec3d xyz2 = lm2.xyz - cam_xyz;
-    cv::Vec3d xyz2_rot = calc_xyz_after_rotation(xyz2, elev, azim, 0);
+    cv::Vec3d xyz2_rot = cam.calc_xyz_after_rotation(xyz2, elev, azim, 0);
     cv::Vec2d uv2 = cam.project_xyz_to_uv(xyz2_rot);
 
     // dump the U,V points and perform visibility check
@@ -94,7 +94,7 @@ bool landmark_test(
     world_azim = lm1.calc_world_azim(u2, ang, rel_azim);
     pos_xz = lm1.calc_world_xz(u2, ang, r);
 
-    std::cout << "Robot is at: [" << pos_xz[0] << ", " << pos_xz[1] << "] @ " << world_azim * RAD2DEG << std::endl;
+    std::cout << "Robot is at: [" << pos_xz[0] << ", " << pos_xz[1] << "] @ " << world_azim * cpoz::RAD2DEG << std::endl;
     //
     //// this integer coordinate stuff is disabled for now...
     //if False:
@@ -125,7 +125,7 @@ void room_test(
     {
         double cam_azim_deg = r.second[0];
         double cam_elev_deg = r.second[1] + elev_offset;
-        cv::Vec2d cam_angs_rad = { cam_azim_deg * DEG2RAD, cam_elev_deg * DEG2RAD };
+        cv::Vec2d cam_angs_rad = { cam_azim_deg * cpoz::DEG2RAD, cam_elev_deg * cpoz::DEG2RAD };
 
         tMapStrToXYZRL& markx = all_landmark_maps[lm_map_name];
 
@@ -133,8 +133,8 @@ void room_test(
         double world_azim;
 
         const std::string& rkey = r.first;
-        XYZLandmark lm1(mark1[rkey].xyz, mark1[rkey].adj_R, mark1[rkey].adj_L);
-        XYZLandmark lm2(markx[rkey].xyz, markx[rkey].adj_R, markx[rkey].adj_L);
+        cpoz::XYZLandmark lm1(mark1[rkey].xyz, mark1[rkey].adj_R, mark1[rkey].adj_L);
+        cpoz::XYZLandmark lm2(markx[rkey].xyz, markx[rkey].adj_R, markx[rkey].adj_L);
 
         bool result = true;
         bool flag = landmark_test(lm1, lm2, known_cam_xyz, cam_angs_rad, pos_xz, world_azim);
@@ -154,7 +154,7 @@ void room_test(
             result = false;
         }
 
-        world_azim *= RAD2DEG;
+        world_azim *= cpoz::RAD2DEG;
         if ((abs(world_azim - cam_azim_deg) >= EPS) && (abs(world_azim - 360.0 - cam_azim_deg) >= EPS))
         {
             result = false;
@@ -171,54 +171,28 @@ void room_test(
 void test_room1()
 {
     {
-        // LM name mapped to[world_azim, elev] for visibility at world(1, 1)
-        // has one case where one landmark is not visible
+        // LM name mapped to [world_azim, elev] for visibility at world (1, 1)
         cv::Vec3d xyz = { 1.0, -2.0, 1.0 };
-        room_test(lm_vis_1_1, xyz, "mark2");
+        room_test(lm_vis_1_1, xyz, "mark2");  // one case with one landmark not visible
+        room_test(lm_vis_1_1, xyz, "mark3");
+        room_test(lm_vis_1_1, xyz, "mark2", 10.0);
+        room_test(lm_vis_1_1, xyz, "mark3", 10.0);
     }
 
     {
-        // LM name mapped to[world_azim, elev] for visibility at world(1, 1)
-        cv::Vec3d xyz = { 1.0, -2.0, 1.0 };
+        // LM name mapped to[world_azim, elev] for visibility at world (1, 1)
+        cv::Vec3d xyz = { 1.0, -3.0, 1.0 };
+        room_test(lm_vis_1_1, xyz, "mark2");
         room_test(lm_vis_1_1, xyz, "mark3");
     }
 
     {
-        // LM name mapped to[world_azim, elev] for visibility at world(1, 1)
-        // camera is at(1, 1) and -2 units high, elevation offset 10 degrees
-        cv::Vec3d xyz = { 1.0, -2.0, 1.0 };
-        room_test(lm_vis_1_1, xyz, "mark2", 10.0);
+        // LM name mapped to[world_azim, elev] for visibility at world(7, 6)
+        cv::Vec3d xyz = { 7.0, -2.0, 6.0 };
+        room_test(lm_vis_7_6, xyz, "mark2");
+        room_test(lm_vis_7_6, xyz, "mark3");
     }
 }
-
-//
-//            def test_room_x1_z1_y2_lm3_elev10(self) :
-//            // LM name mapped to[world_azim, elev] for visibility at world(1, 1)
-//            xyz = [1., -2., 1.]
-//            self.assertTrue(room_test(lm_vis_1_1, xyz, "mark3", elev_offset = 10.0))
-//
-//            def test_room_x1_z1_y3_lm_2elev00(self) :
-//            // LM name mapped to[world_azim, elev] for visibility at world(1, 1)
-//            xyz = [1., -3., 1.]
-//            self.assertTrue(room_test(lm_vis_1_1, xyz, "mark2"))
-//
-//            def test_room_x1_z1_y3_lm2_elev00(self) :
-//            // LM name mapped to[world_azim, elev] for visibility at world(1, 1)
-//            xyz = [1., -3., 1.]
-//            self.assertTrue(room_test(lm_vis_1_1, xyz, "mark3"))
-//
-//            def test_room_x7_z6_y2_lm2_elev00(self) :
-//            // LM name mapped to[world_azim, elev] for visibility at world(7, 6)
-//            // camera is at(7, 6) and -2 units high
-//            xyz = [7., -2., 6.]
-//            self.assertTrue(room_test(lm_vis_7_6, xyz, "mark2"))
-//
-//            def test_room_x7_z6_y2_lm3_elev00(self) :
-//            // LM name mapped to[world_azim, elev] for visibility at world(7, 6)
-//            // camera is at(7, 6) and -2 units high
-//            xyz = [7., -2., 6.]
-//            self.assertTrue(room_test(lm_vis_7_6, xyz, "mark3"))
-//
 
 
 

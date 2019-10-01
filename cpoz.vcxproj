@@ -158,12 +158,10 @@
   <ItemGroup>
     <ClCompile Include="cpoz.cpp" />
     <ClCompile Include="room1.cpp" />
-    <ClCompile Include="cpoz_def.cpp" />
     <ClCompile Include="CameraHelper.cpp" />
     <ClCompile Include="XYZLandmark.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="cpoz_def.h" />
     <ClInclude Include="CameraHelper.h" />
     <ClInclude Include="room1.h" />
     <ClInclude Include="XYZLandmark.h" />

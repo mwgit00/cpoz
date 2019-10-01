@@ -24,17 +24,11 @@
     <ClCompile Include="XYZLandmark.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="cpoz_def.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="CameraHelper.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="cpoz_def.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="room1.h">
       <Filter>Header Files</Filter>
     </ClInclude>

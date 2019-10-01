@@ -26,47 +26,55 @@
 #include <string>
 #include <opencv2/imgproc.hpp>
 
-class XYZLandmark
+
+namespace cpoz
 {
-public:
+    const double DEG2RAD = CV_PI / 180.0;
+    const double RAD2DEG = 180.0 / CV_PI;
 
-    XYZLandmark();
-    virtual ~XYZLandmark();
-    
-    XYZLandmark(
-        const cv::Vec3d& xyz,
-        const double u1max = 0.0,
-        const double u1min = 0.0,
-        const std::string & rs = "");
 
-    // Assign pixel coordinates for latest Landmark sighting.
-    //    : param uv : (U, V) coordinates.
-    void set_current_uv(const cv::Vec2d& rUV);
+    class XYZLandmark
+    {
+    public:
 
-    // Determine world position and pointing direction
-    // given relative horizontal positions of landmarks
-    // and previous triangulation result(angle, range).
-    // param u_var : Horizontal coordinate of variable landmark
-    // param ang : Angle to this landmark
-    // param r : Ground range to this landmark
-    // return X,Z in world coordinates
-    cv::Vec2d  calc_world_xz(const double u, const double ang, const double r);
+        XYZLandmark();
+        virtual ~XYZLandmark();
 
-    // Convert camera's azimuth to LM to world azimuth.
-    // Relative azimuth in camera view is also considered.
-    // param u_var : U coordinate of variable LM
-    // param ang : Angle between camera and LM1-to-LM2 vector
-    // param rel_azim : Relative azimuth to LM1 as seen in image
-    // return : World azimuth (radians)
-    double calc_world_azim(double u, double ang, double rel_azim);
+        XYZLandmark(
+            const cv::Vec3d& xyz,
+            const double u1max = 0.0,
+            const double u1min = 0.0,
+            const std::string & rs = "");
 
-public:
-    
-    cv::Vec3d xyz;      // world coordinates
-    double ang_u1max;   // adjustment when #1 is RIGHT (max u coord) landmark.
-    double ang_u1min;   // adjustment when #1 is LEFT (min u coord) landmark.
-    cv::Vec2d uv;       // pixel coordinates (u horizontal, v vertical)
-    std::string name;
-};
+        // Assign pixel coordinates for latest Landmark sighting.
+        //    : param uv : (U, V) coordinates.
+        void set_current_uv(const cv::Vec2d& rUV);
+
+        // Determine world position and pointing direction
+        // given relative horizontal positions of landmarks
+        // and previous triangulation result(angle, range).
+        // param u_var : Horizontal coordinate of variable landmark
+        // param ang : Angle to this landmark
+        // param r : Ground range to this landmark
+        // return X,Z in world coordinates
+        cv::Vec2d  calc_world_xz(const double u, const double ang, const double r);
+
+        // Convert camera's azimuth to LM to world azimuth.
+        // Relative azimuth in camera view is also considered.
+        // param u_var : U coordinate of variable LM
+        // param ang : Angle between camera and LM1-to-LM2 vector
+        // param rel_azim : Relative azimuth to LM1 as seen in image
+        // return : World azimuth (radians)
+        double calc_world_azim(double u, double ang, double rel_azim);
+
+    public:
+
+        cv::Vec3d xyz;      // world coordinates
+        double ang_u1max;   // adjustment when #1 is RIGHT (max u coord) landmark.
+        double ang_u1min;   // adjustment when #1 is LEFT (min u coord) landmark.
+        cv::Vec2d uv;       // pixel coordinates (u horizontal, v vertical)
+        std::string name;
+    };
+}
 
 #endif // XYZ_LANDMARK_H_

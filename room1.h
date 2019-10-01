@@ -23,7 +23,20 @@
 #ifndef ROOM_1_H_
 #define ROOM_1_H_
 
-#include "cpoz_def.h"
+#include <map>
+#include <string>
+#include <opencv2/imgproc.hpp>
+
+typedef struct _T_xyz_RL_struct
+{
+    cv::Vec3d xyz;
+    double adj_R;   // always negative
+    double adj_L;   // always positive
+} T_xyz_RL;
+
+typedef std::map<std::string, T_xyz_RL> tMapStrToXYZRL;
+typedef std::map<std::string, cv::Vec2d> tMapStrToAZEL;
+typedef std::map<std::string, tMapStrToXYZRL> tMapStrToMapStrToXYZRL;
 
 extern tMapStrToXYZRL mark1;
 extern tMapStrToXYZRL mark2;
@@ -34,6 +47,5 @@ extern tMapStrToMapStrToXYZRL all_landmark_maps;
 
 extern tMapStrToAZEL lm_vis_1_1;
 extern tMapStrToAZEL lm_vis_7_6;
-
 
 #endif // ROOM_1_H_
