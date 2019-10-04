@@ -25,6 +25,7 @@
 
 #include <opencv2/imgproc.hpp>
 
+
 namespace cpoz
 {
     // camera convention
@@ -65,6 +66,8 @@ namespace cpoz
 
         CameraHelper();
         virtual ~CameraHelper();
+
+        static void cal(const std::string& rs);
 
         static cv::Mat calc_axes_rotation_mat(const double roll, const double pitch, const double yaw);
         static cv::Vec3d calc_xyz_after_rotation(const cv::Vec3d& xyz_pos, const double roll, const double pitch, const double yaw);

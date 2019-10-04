@@ -20,10 +20,115 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#include <iostream>
+#include <opencv2/highgui.hpp>
+#include <opencv2/calib3d.hpp>
 #include "CameraHelper.h"
 
 namespace cpoz
 {
+    static void calcBGRLandmarkCorners(
+        const cv::Size& boardSize,
+        const float squareSize,
+        std::vector<cv::Point3f>& corners)
+    {
+        // the BGRLandmark calibration pattern has 12 corners A-L in ordering shown below
+        // so the corners array must be initialized in same order
+        // A D G J
+        // B E H K
+        // C F I L
+        corners.resize(0);
+        for (int j = 0; j < boardSize.width; j++)
+        {
+            for (int i = 0; i < boardSize.height; i++)
+            {
+                corners.push_back(cv::Point3f(float(j * squareSize), float(i * squareSize), 0));
+            }
+        }
+    }
+
+    // out of OpenCV example code calibration.cpp
+    static double computeReprojectionErrors(
+        const std::vector<std::vector<cv::Point3f> >& objectPoints,
+        const std::vector<std::vector<cv::Point2f> >& imagePoints,
+        const std::vector<cv::Mat>& rvecs, const std::vector<cv::Mat>& tvecs,
+        const cv::Mat& cameraMatrix, const cv::Mat& distCoeffs,
+        std::vector<float>& perViewErrors)
+    {
+        std::vector<cv::Point2f> imagePoints2;
+        int i;
+        int totalPoints = 0;
+        double totalErr = 0.0;
+        perViewErrors.resize(objectPoints.size());
+
+        for (i = 0; i < (int)objectPoints.size(); i++)
+        {
+            projectPoints(cv::Mat(objectPoints[i]), rvecs[i], tvecs[i],
+                cameraMatrix, distCoeffs, imagePoints2);
+            double err = norm(cv::Mat(imagePoints[i]), cv::Mat(imagePoints2), cv::NORM_L2);
+            int n = (int)objectPoints[i].size();
+            perViewErrors[i] = (float)std::sqrt((err * err) / n);
+            totalErr += (err * err);
+            totalPoints += n;
+        }
+
+        return std::sqrt(totalErr / totalPoints);
+    }
+
+
+    // out of OpenCV example code calibration.cpp
+    static bool runCalibration(
+        std::vector<std::vector<cv::Point2f>> imagePoints,
+        cv::Size imageSize,
+        cv::Size boardSize,
+        float squareSize,
+        float grid_width,
+        bool release_object,
+        int flags,
+        cv::Mat& cameraMatrix,
+        cv::Mat& distCoeffs,
+        std::vector<float>& reprojErrs,
+        std::vector<cv::Point3f>& newObjPoints,
+        double& totalAvgErr)
+    {
+        std::vector<cv::Mat> rvecs;
+        std::vector<cv::Mat> tvecs;
+
+        std::vector<std::vector<cv::Point3f>> objectPoints(1);
+        calcBGRLandmarkCorners(boardSize, squareSize, objectPoints[0]);
+       // objectPoints[0][boardSize.width - 1].x = objectPoints[0][0].x + grid_width;
+        newObjPoints = objectPoints[0];
+
+        objectPoints.resize(imagePoints.size(), objectPoints[0]);
+
+        double rms;
+        int iFixedPoint = -1;
+        if (release_object)
+            iFixedPoint = boardSize.width - 1;
+        rms = calibrateCameraRO(objectPoints, imagePoints, imageSize, iFixedPoint,
+            cameraMatrix, distCoeffs, rvecs, tvecs, newObjPoints,
+            flags /*| cv::CALIB_FIX_K3*/ | cv::CALIB_USE_LU);
+        //printf("RMS error reported by calibrateCamera: %g\n", rms);
+
+        bool ok = checkRange(cameraMatrix) && checkRange(distCoeffs);
+
+        if (release_object) {
+            std::cout << "New board corners: " << std::endl;;
+            std::cout << newObjPoints[0] << std::endl;;
+            std::cout << newObjPoints[boardSize.width - 1] << std::endl;;
+            std::cout << newObjPoints[boardSize.width * (boardSize.height - 1)] << std::endl;;
+            std::cout << newObjPoints.back() << std::endl;;
+        }
+
+        objectPoints.clear();
+        objectPoints.resize(imagePoints.size(), newObjPoints);
+        totalAvgErr = computeReprojectionErrors(objectPoints, imagePoints,
+            rvecs, tvecs, cameraMatrix, distCoeffs, reprojErrs);
+
+        return ok;
+    }
+
+
     CameraHelper::CameraHelper()
     {
         img_sz = { 640, 480 };
@@ -42,6 +147,73 @@ namespace cpoz
     CameraHelper::~CameraHelper()
     {
 
+    }
+
+
+    void CameraHelper::cal(const std::string& rs)
+    {
+        std::string spath = rs + "\\cal_meta.yaml";
+        cv::FileStorage fsin;
+        fsin.open(spath, cv::FileStorage::READ);
+        if (fsin.isOpened())
+        {
+            cv::Size img_sz;
+            cv::Size grid_sz;
+            std::vector<std::string> vcalfiles;
+            std::vector<std::vector<cv::Point2f>> vvcal;
+
+            fsin["image_size"] >> img_sz;
+            fsin["grid_size"] >> grid_sz;
+            fsin["files"] >> vcalfiles;
+            fsin["points"] >> vvcal;
+
+            cv::TermCriteria tc_corners(
+                cv::TermCriteria::MAX_ITER | cv::TermCriteria::EPS,
+                50, // max number of iterations
+                0.0001);
+
+            for (size_t i = 0; i < vcalfiles.size(); i++)
+            {
+                std::string sfile = rs + "\\" + vcalfiles[i];
+                cv::Mat img = cv::imread(sfile.c_str(), cv::IMREAD_GRAYSCALE);
+                std::vector<cv::Point2f>& rv = vvcal[i];
+                cv::cornerSubPix(img, rv, { 5,5 }, { -1,-1 }, tc_corners);
+            }
+
+            cv::Mat cameraMatrix;
+            cv::Mat distCoeffs;
+            std::vector<float> reprojErrs;
+            std::vector<cv::Point3f> newObjPoints;
+            double totalAvgErr;
+
+            int flags = 0; // cv::CALIB_RATIONAL_MODEL
+            bool is_ok = runCalibration(vvcal, img_sz, grid_sz, 1, 1 * 3, false,
+                flags, cameraMatrix, distCoeffs, reprojErrs, newObjPoints, totalAvgErr);
+
+            if (is_ok)
+            {
+                std::cout << "Calibration successful!!!" << std::endl;
+                cv::FileStorage fsout;
+                fsout.open("foo.yaml", cv::FileStorage::WRITE);
+                if (fsout.isOpened())
+                {
+                    fsout << "image_size" << img_sz;
+                    fsout << "grid_size" << grid_sz;
+                    fsout << "flags" << flags;
+                    fsout << "camera_matrix" << cameraMatrix;
+                    fsout << "distortion_coefficients" << distCoeffs;
+                    fsout << "avg_reprojection_error" << totalAvgErr;
+                    if (!reprojErrs.empty())
+                    {
+                        fsout << "per_view_reprojection_errors" << cv::Mat(reprojErrs);
+                    }
+                }
+            }
+            else
+            {
+                std::cout << "Calibration failed!!!" << std::endl;
+            }
+        }
     }
 
 

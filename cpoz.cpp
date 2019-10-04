@@ -199,5 +199,7 @@ void test_room1()
 int main()
 {
     std::cout << "CPOZ Test Application" << std::endl;
+    cpoz::CameraHelper cam;
+    cam.cal(".\\cal_set_2");
     test_room1();
 }
