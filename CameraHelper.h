@@ -70,19 +70,22 @@ namespace cpoz
         static void cal(const std::string& rs);
 
         static cv::Mat calc_axes_rotation_mat(const double roll, const double pitch, const double yaw);
-        static cv::Vec3d calc_xyz_after_rotation(const cv::Vec3d& xyz_pos, const double roll, const double pitch, const double yaw);
+        static cv::Point3d calc_xyz_after_rotation(const cv::Point3d& xyz_pos, const double roll, const double pitch, const double yaw);
 
+        // load calibration data
+        bool load(const std::string& rscal);
+        
         // test if pixel at (u, v) is within valid range.
         bool is_visible(const cv::Vec2d& rUV) const;
 
         // project 3D world point to image plane
-        cv::Vec2d project_xyz_to_uv(const cv::Vec3d& rXYZ);
+        cv::Vec2d project_xyz_to_uv(const cv::Point3d& rXYZ) const;
 
         // calculate azimuth (radians) and elevation (radians) to image point
-        cv::Vec2d calc_azim_elev(const cv::Vec2d& rUV);
+        cv::Vec2d calc_azim_elev(const cv::Vec2d& rUV) const;
 
         // calculate camera-relative X,Y,Z vector to point in image
-        cv::Vec3d calc_rel_xyz_to_pixel(
+        cv::Point3d calc_rel_xyz_to_pixel(
             const double known_Y,
             const cv::Vec2d& rUV,
             const double cam_elev_rad);
@@ -96,8 +99,8 @@ namespace cpoz
         // param: loc_angle angle about XYZ1 from XYZ2 to camera XYZ from Law-of-Cosines
         // param: rel_azim azimuth angle of XYZ1 relative to camera
         void triangulate(
-            const cv::Vec3d& rXYZ1,
-            const cv::Vec3d& rXYZ2,
+            const cv::Point3d& rXYZ1,
+            const cv::Point3d& rXYZ2,
             const cv::Vec2d& rUV1,
             const cv::Vec2d& rUV2,
             double& range,
@@ -111,14 +114,15 @@ namespace cpoz
         double world_y;     // known camera height
         double elev;        // known camera elevation (radians)
 
-        // arbitrary test params
+        // camera calibration data
         cv::Size img_sz;
         double cx;
         double cy;
         double fx;
         double fy;
 
-        cv::Mat calib;
+        cv::Mat cam_matrix;
+        cv::Mat dist_coeffs;
     };
 }
 

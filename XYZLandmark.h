@@ -41,7 +41,7 @@ namespace cpoz
         virtual ~XYZLandmark();
 
         XYZLandmark(
-            const cv::Vec3d& xyz,
+            const cv::Point3d& xyz,
             const double u1max = 0.0,
             const double u1min = 0.0,
             const std::string & rs = "");
@@ -69,7 +69,7 @@ namespace cpoz
 
     public:
 
-        cv::Vec3d xyz;      // world coordinates
+        cv::Point3d xyz;      // world coordinates
         double ang_u1max;   // adjustment when #1 is RIGHT (max u coord) landmark.
         double ang_u1min;   // adjustment when #1 is LEFT (min u coord) landmark.
         cv::Vec2d uv;       // pixel coordinates (u horizontal, v vertical)

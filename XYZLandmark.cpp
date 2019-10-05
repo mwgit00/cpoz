@@ -37,7 +37,7 @@ namespace cpoz
 
 
     XYZLandmark::XYZLandmark(
-        const cv::Vec3d& xyz,
+        const cv::Point3d& xyz,
         const double u1max,
         const double u1min,
         const std::string& rs) :
@@ -70,8 +70,8 @@ namespace cpoz
 
         // result is in X, Z plane so need negative sine in math below
         // to keep azimuth direction consistent (positive azimuth is clockwise)
-        double world_x = xyz[0] + cos(ang_adj) * r;
-        double world_z = xyz[2] - sin(ang_adj) * r;
+        double world_x = xyz.x + cos(ang_adj) * r;
+        double world_z = xyz.z - sin(ang_adj) * r;
 
         return { world_x, world_z };
     }

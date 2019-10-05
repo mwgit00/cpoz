@@ -35,7 +35,7 @@ cpoz::CameraHelper cam;
 bool landmark_test(
     cpoz::XYZLandmark& lm1,
     cpoz::XYZLandmark& lm2,
-    const cv::Vec3d& cam_xyz,
+    const cv::Point3d& cam_xyz,
     const cv::Vec2d& cam_angs_rad,
     cv::Vec2d& pos_xz,
     double& world_azim)
@@ -49,13 +49,13 @@ bool landmark_test(
     double elev = cam_angs_rad[1];
     
     // determine pixel location of fixed LM 1
-    cv::Vec3d xyz1 = lm1.xyz - cam_xyz;
-    cv::Vec3d xyz1_rot = cam.calc_xyz_after_rotation(xyz1, elev, azim, 0);
+    cv::Point3d xyz1 = lm1.xyz - cam_xyz;
+    cv::Point3d xyz1_rot = cam.calc_xyz_after_rotation(xyz1, elev, azim, 0);
     cv::Vec2d uv1 = cam.project_xyz_to_uv(xyz1_rot);
 
     // determine pixel location of left/right LM
-    cv::Vec3d xyz2 = lm2.xyz - cam_xyz;
-    cv::Vec3d xyz2_rot = cam.calc_xyz_after_rotation(xyz2, elev, azim, 0);
+    cv::Point3d xyz2 = lm2.xyz - cam_xyz;
+    cv::Point3d xyz2_rot = cam.calc_xyz_after_rotation(xyz2, elev, azim, 0);
     cv::Vec2d uv2 = cam.project_xyz_to_uv(xyz2_rot);
 
     // dump the U,V points and perform visibility check
@@ -78,7 +78,7 @@ bool landmark_test(
     // landmarks have been acquired
     // camera elevation and world Y also need updating
     cam.elev = elev;
-    cam.world_y = cam_xyz[1];
+    cam.world_y = cam_xyz.y;
 
     lm1.set_current_uv(uv1);
     lm2.set_current_uv(uv2);
@@ -111,7 +111,7 @@ bool landmark_test(
 
 void room_test(
     const tMapStrToAZEL& lm_vis,
-    const cv::Vec3d& known_cam_xyz,
+    const cv::Point3d& known_cam_xyz,
     const std::string& lm_map_name,
     const double elev_offset = 0.0)
 {
@@ -144,12 +144,12 @@ void room_test(
             result = false;
         }
 
-        if (abs(pos_xz[0] - known_cam_xyz[0]) >= EPS)
+        if (abs(pos_xz[0] - known_cam_xyz.x) >= EPS)
         {
             result = false;
         }
 
-        if (abs(pos_xz[1] - known_cam_xyz[2]) >= EPS)
+        if (abs(pos_xz[1] - known_cam_xyz.z) >= EPS)
         {
             result = false;
         }
@@ -172,7 +172,7 @@ void test_room1()
 {
     {
         // LM name mapped to [world_azim, elev] for visibility at world (1, 1)
-        cv::Vec3d xyz = { 1.0, -2.0, 1.0 };
+        cv::Point3d xyz = { 1.0, -2.0, 1.0 };
         room_test(lm_vis_1_1, xyz, "mark2");  // one case with one landmark not visible
         room_test(lm_vis_1_1, xyz, "mark3");
         room_test(lm_vis_1_1, xyz, "mark2", 10.0);
@@ -181,14 +181,14 @@ void test_room1()
 
     {
         // LM name mapped to[world_azim, elev] for visibility at world (1, 1)
-        cv::Vec3d xyz = { 1.0, -3.0, 1.0 };
+        cv::Point3d xyz = { 1.0, -3.0, 1.0 };
         room_test(lm_vis_1_1, xyz, "mark2");
         room_test(lm_vis_1_1, xyz, "mark3");
     }
 
     {
         // LM name mapped to[world_azim, elev] for visibility at world(7, 6)
-        cv::Vec3d xyz = { 7.0, -2.0, 6.0 };
+        cv::Point3d xyz = { 7.0, -2.0, 6.0 };
         room_test(lm_vis_7_6, xyz, "mark2");
         room_test(lm_vis_7_6, xyz, "mark3");
     }
