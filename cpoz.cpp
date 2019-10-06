@@ -51,12 +51,12 @@ bool landmark_test(
     // determine pixel location of fixed LM 1
     cv::Point3d xyz1 = lm1.xyz - cam_xyz;
     cv::Point3d xyz1_rot = cam.calc_xyz_after_rotation(xyz1, elev, azim, 0);
-    cv::Vec2d uv1 = cam.project_xyz_to_uv(xyz1_rot);
+    cv::Point2d uv1 = cam.project_xyz_to_uv(xyz1_rot);
 
     // determine pixel location of left/right LM
     cv::Point3d xyz2 = lm2.xyz - cam_xyz;
     cv::Point3d xyz2_rot = cam.calc_xyz_after_rotation(xyz2, elev, azim, 0);
-    cv::Vec2d uv2 = cam.project_xyz_to_uv(xyz2_rot);
+    cv::Point2d uv2 = cam.project_xyz_to_uv(xyz2_rot);
 
     // dump the U,V points and perform visibility check
     std::cout << std::endl;
@@ -70,7 +70,6 @@ bool landmark_test(
     {
         std::cout << "At least one landmark is NOT visible!" << std::endl;
         return false;
-        //return False, 0., 0., 0.
     }
     
     // all is well so proceed with test...

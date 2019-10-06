@@ -30,6 +30,7 @@ namespace cpoz
     CameraHelper::CameraHelper()
     {
         // ideal camera for testing
+        // real calibration data must be applied with load method
         
         img_sz = { 640, 480 };
         
@@ -45,7 +46,7 @@ namespace cpoz
         cam_matrix.at<double>(1, 2) = cy;
         
         std::vector<double> dc = { 0,0,0,0,0 };
-        dist_coeffs = cv::Mat(dc);
+        dist_coeffs = cv::Mat(dc).t();
     }
 
 
@@ -230,11 +231,14 @@ namespace cpoz
     }
 
 
-    cv::Vec2d CameraHelper::project_xyz_to_uv(const cv::Point3d& rXYZ) const
+    cv::Point2d CameraHelper::project_xyz_to_uv(const cv::Point3d& rXYZ) const
     {
-        double pixel_u = (fx * (rXYZ.x / rXYZ.z)) + cx;
-        double pixel_v = (fy * (rXYZ.y / rXYZ.z)) + cy;
-        return cv::Vec2d(pixel_u, pixel_v);
+        // no rotation and no translation
+        const cv::Mat v0 = cv::Mat(std::vector<double>{ 0, 0, 0 }).t();
+        std::vector<cv::Point3d> world_xyz(1, rXYZ);
+        std::vector<cv::Point2d> proj_uv;
+        cv::projectPoints(world_xyz, v0, v0, cam_matrix, dist_coeffs, proj_uv);
+        return proj_uv[0];
     }
 
 

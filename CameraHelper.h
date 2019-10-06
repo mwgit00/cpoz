@@ -78,8 +78,8 @@ namespace cpoz
         // test if pixel at (u, v) is within valid range.
         bool is_visible(const cv::Vec2d& rUV) const;
 
-        // project 3D world point to image plane
-        cv::Vec2d project_xyz_to_uv(const cv::Point3d& rXYZ) const;
+        // project 3D world point (X,Y,Z) to image plane (U,V)
+        cv::Point2d project_xyz_to_uv(const cv::Point3d& rXYZ) const;
 
         // calculate azimuth (radians) and elevation (radians) to image point
         cv::Vec2d calc_azim_elev(const cv::Vec2d& rUV) const;
