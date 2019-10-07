@@ -76,8 +76,8 @@ bool landmark_test(
 
     // landmarks have been acquired
     // camera elevation and world Y also need updating
-    cam.elev = elev;
-    cam.world_y = cam_xyz.y;
+    cam.cam_elev = elev;
+    cam.cam_y = cam_xyz.y;
 
     lm1.set_current_uv(uv1);
     lm2.set_current_uv(uv2);

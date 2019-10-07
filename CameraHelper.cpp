@@ -213,16 +213,16 @@ namespace cpoz
     }
 
 
-    bool CameraHelper::is_visible(const cv::Vec2d& rUV) const
+    bool CameraHelper::is_visible(const cv::Point2d& rUV) const
     {
         bool result = true;
 
-        if ((rUV[0] < 0.0) || (rUV[0] >= img_sz.width))
+        if ((rUV.x < 0.0) || (rUV.x >= img_sz.width))
         {
             result = false;
         }
 
-        if ((rUV[1] < 0.0) || (rUV[1] >= img_sz.height))
+        if ((rUV.y < 0.0) || (rUV.y >= img_sz.height))
         {
             result = false;
         }
@@ -233,7 +233,7 @@ namespace cpoz
 
     cv::Point2d CameraHelper::project_xyz_to_uv(const cv::Point3d& rXYZ) const
     {
-        // no rotation and no translation
+        // zero rotation and zero translation
         const cv::Mat v0 = cv::Mat(std::vector<double>{ 0, 0, 0 }).t();
         std::vector<cv::Point3d> world_xyz(1, rXYZ);
         std::vector<cv::Point2d> proj_uv;
@@ -242,34 +242,25 @@ namespace cpoz
     }
 
 
-    cv::Vec2d CameraHelper::calc_azim_elev(const cv::Vec2d& rUV) const
-    {
-        // need negation for elevation so it matches camera convention
-        double ang_azimuth = atan((rUV[0] - cx) / fx);
-        double ang_elevation = atan((cy - rUV[1]) / fy);
-        return { ang_azimuth, ang_elevation };
-    }
-
-
-    cv::Point3d CameraHelper::calc_rel_xyz_to_pixel(
+    cv::Point3d CameraHelper::calc_cam_to_xyz(
         const double known_Y,
         const cv::Vec2d& rUV,
         const double cam_elev_rad)
     {
-        // use camera params to convert(u, v) to ray
-        // Z coordinate is 1
-        double ray_x = (rUV[0] - cx) / fx;
-        double ray_y = (rUV[1] - cy) / fy;
-        cv::Point3d ray_cam = { ray_x, ray_y, 1.0 };
+        // use camera params to convert (U,V) to normalized world coordinates (X,Y,1)
+        std::vector<cv::Point2d> input_uv(1, rUV);
+        std::vector<cv::Point2d> output_uv;
+        cv::undistortPoints(input_uv, output_uv, cam_matrix, dist_coeffs);
+        cv::Point3d world_xy1 = { output_uv[0].x, output_uv[0].y, 1.0 };
 
-        // rotate ray to undo known camera elevation
-        cv::Point3d ray_cam_unrot = calc_xyz_after_rotation(ray_cam, -cam_elev_rad, 0.0, 0.0);
+        // rotate to undo known camera elevation
+        cv::Point3d world_xy1_unrot = calc_xyz_after_rotation(world_xy1, -cam_elev_rad, 0.0, 0.0);
 
-        // scale ray based on known height (Y)
+        // scale normalized world coordinates based on known height Y
         // this has X,Y,Z relative to camera body
         // angles and ranges can be derived from this vector
-        double rescale = known_Y / ray_cam_unrot.y;
-        return ray_cam_unrot * rescale;
+        double rescale = known_Y / world_xy1_unrot.y;
+        return world_xy1_unrot * rescale;
     }
 
 
@@ -283,28 +274,27 @@ namespace cpoz
         double& rel_azim)
     {
         // camera is at known Y but sightings can be at different heights
-        double known_Y_a = rXYZa.y - world_y;
-        double known_Y_b = rXYZb.y - world_y;
+        double known_Y_a = rXYZa.y - cam_y;
+        double known_Y_b = rXYZb.y - cam_y;
 
-        // find relative vector to known real-world location A given its pixel coords
+        // find relative vector to known world location A given its pixel coords
         // then calculate ground range to A
-        cv::Point3d xyz_a = calc_rel_xyz_to_pixel(known_Y_a, rUVa, elev);
+        cv::Point3d xyz_a = calc_cam_to_xyz(known_Y_a, rUVa, cam_elev);
         double x_a = xyz_a.x;
         double z_a = xyz_a.z;
         double r_a = sqrt((x_a * x_a) + (z_a * z_a));
 
-        // calculate relative azim to real-world location A
+        // calculate relative azim to world location A
         rel_azim = atan(x_a / z_a);
 
-        // find relative vector to known real-world location B given its pixel coords
-        // FIXME -- this landmark could be point along an edge at unknown position
+        // find relative vector to known world location B given its pixel coords
         // then calculate ground range to B
-        cv::Point3d xyz_b = calc_rel_xyz_to_pixel(known_Y_b, rUVb, elev);
+        cv::Point3d xyz_b = calc_cam_to_xyz(known_Y_b, rUVb, cam_elev);
         double x_b = xyz_b.x;
         double z_b = xyz_b.z;
         double r_b = sqrt((x_b * x_b) + (z_b * z_b));
 
-        // find vector between real-world locations A and B
+        // find vector between world locations A and B
         // then calculate the ground range between them
         cv::Point3d xyz_c = xyz_b - xyz_a;
         double x_c = xyz_c.x;
@@ -317,7 +307,7 @@ namespace cpoz
         double gamma_cos = ((r_a * r_a) + (r_c * r_c) - (r_b * r_b)) / (2 * r_a * r_c);
         loc_angle = acos(gamma_cos);
 
-        // finally stuff ground range to real-world location A
+        // finally stuff ground range to world location A
         range = r_a;
     }
 }

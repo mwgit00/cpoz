@@ -75,22 +75,20 @@ namespace cpoz
         // load calibration data
         bool load(const std::string& rscal);
         
-        // test if pixel at (u, v) is within valid range.
-        bool is_visible(const cv::Vec2d& rUV) const;
+        // test if pixel at (U,V) is within FOV
+        bool is_visible(const cv::Point2d& rUV) const;
 
         // project 3D world point (X,Y,Z) to image plane (U,V)
         cv::Point2d project_xyz_to_uv(const cv::Point3d& rXYZ) const;
 
-        // calculate azimuth (radians) and elevation (radians) to image point
-        cv::Vec2d calc_azim_elev(const cv::Vec2d& rUV) const;
-
-        // calculate camera-relative X,Y,Z vector to point in image
-        cv::Point3d calc_rel_xyz_to_pixel(
+        // calculate vector from camera to world point (X,Y,Z)
+        // given its known Y, image coords (U,V), and camera elevation
+        cv::Point3d calc_cam_to_xyz(
             const double known_Y,
             const cv::Vec2d& rUV,
             const double cam_elev_rad);
 
-        // Use sightings of real world X,Y,Z and corresponding U,V to perform triangulation.
+        // Use sightings of real world (X,Y,Z) and corresponding (U,V) to perform triangulation.
         // param: rXYZ1 reference to real-world location 1
         // param: rXYZ2 reference to real-world location 2
         // param: rUV1 reference to pixel coords for XYZ1
@@ -111,8 +109,8 @@ namespace cpoz
 
         // TODO -- make it accept OpenCV intrinsic camera calib matrix
         // these must be updated prior to triangulation
-        double world_y;     // known camera height
-        double elev;        // known camera elevation (radians)
+        double cam_y;       // known camera height
+        double cam_elev;    // known camera elevation (radians)
 
         // camera calibration data
         cv::Size img_sz;
