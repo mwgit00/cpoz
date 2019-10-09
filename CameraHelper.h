@@ -75,32 +75,32 @@ namespace cpoz
         // load calibration data
         bool load(const std::string& rscal);
         
-        // test if pixel at (U,V) is within FOV
-        bool is_visible(const cv::Point2d& rUV) const;
+        // test if pixel at (X,Y) is within FOV
+        bool is_visible(const cv::Point2d& rImgXY) const;
 
-        // project 3D world point (X,Y,Z) to image plane (U,V)
-        cv::Point2d project_xyz_to_uv(const cv::Point3d& rXYZ) const;
+        // project 3D world point (X,Y,Z) to image plane (X,Y)
+        cv::Point2d project_world_xyz_to_img_xy(const cv::Point3d& rXYZ) const;
 
         // calculate vector from camera to world point (X,Y,Z)
-        // given its known Y, image coords (U,V), and camera elevation
+        // given its known world Y, image coords (X,Y), and camera elevation
         cv::Point3d calc_cam_to_xyz(
             const double known_Y,
-            const cv::Vec2d& rUV,
+            const cv::Point2d& rImgXY,
             const double cam_elev_rad);
 
-        // Use sightings of real world (X,Y,Z) and corresponding (U,V) to perform triangulation.
-        // param: rXYZ1 reference to real-world location 1
-        // param: rXYZ2 reference to real-world location 2
-        // param: rUV1 reference to pixel coords for XYZ1
-        // param: rUV2 reference to pixel coords for XYZ2
-        // param: range X,Z plane ground range from camera to XYZ1
-        // param: loc_angle angle about XYZ1 from XYZ2 to camera XYZ from Law-of-Cosines
+        // Use known Y of landmarks A and B and their image coordinates to perform triangulation.
+        // param: Ya known Y of world location A
+        // param: Yb known Y of world location B
+        // param: rImgXYa reference to image coords for landmark A
+        // param: rImgXYb reference to image coords for landmark B
+        // param: range X,Z plane ground range from camera to A
+        // param: loc_angle angle about A from B to camera
         // param: rel_azim azimuth angle of XYZ1 relative to camera
         void triangulate(
-            const cv::Point3d& rXYZ1,
-            const cv::Point3d& rXYZ2,
-            const cv::Vec2d& rUV1,
-            const cv::Vec2d& rUV2,
+            const double Ya,
+            const double Yb,
+            const cv::Point2d& rImgXYa,
+            const cv::Point2d& rImgXYb,
             double& range,
             double& loc_angle,
             double& rel_azim);

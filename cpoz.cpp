@@ -37,7 +37,7 @@ bool landmark_test(
     cpoz::XYZLandmark& lm2,
     const cv::Point3d& cam_xyz,
     const cv::Vec2d& cam_angs_rad,
-    cv::Vec2d& pos_xz,
+    cv::Point3d& pos_xyz,
     double& world_azim)
 {
     // for the two landmarks:
@@ -48,27 +48,27 @@ bool landmark_test(
     double azim = cam_angs_rad[0];
     double elev = cam_angs_rad[1];
     
-    // determine pixel location of fixed LM 1
-    cv::Point3d xyz1 = lm1.xyz - cam_xyz;
+    // determine pixel location of LM 1
+    cv::Point3d xyz1 = lm1.world_xyz - cam_xyz;
     cv::Point3d xyz1_rot = cam.calc_xyz_after_rotation(xyz1, elev, azim, 0);
-    cv::Point2d uv1 = cam.project_xyz_to_uv(xyz1_rot);
+    cv::Point2d img_xy1 = cam.project_world_xyz_to_img_xy(xyz1_rot);
 
-    // determine pixel location of left/right LM
-    cv::Point3d xyz2 = lm2.xyz - cam_xyz;
+    // determine pixel location of LM 2
+    cv::Point3d xyz2 = lm2.world_xyz - cam_xyz;
     cv::Point3d xyz2_rot = cam.calc_xyz_after_rotation(xyz2, elev, azim, 0);
-    cv::Point2d uv2 = cam.project_xyz_to_uv(xyz2_rot);
+    cv::Point2d img_xy2 = cam.project_world_xyz_to_img_xy(xyz2_rot);
 
-    // dump the U,V points and perform visibility check
+    // dump the image X,Y points and perform visibility check
     std::cout << std::endl;
-    std::cout << "Image Landmark 1:  " << uv1 << std::endl;
-    std::cout << "Image Landmark 2:  " << uv2 << std::endl;
-    if (cam.is_visible(uv1) && cam.is_visible(uv2))
+    std::cout << "Image Landmark 1:  " << img_xy1 << std::endl;
+    std::cout << "Image Landmark 2:  " << img_xy2 << std::endl;
+    if (cam.is_visible(img_xy1) && cam.is_visible(img_xy2))
     {
         std::cout << "Both landmarks are visible." << std::endl;
     }
     else
     {
-        std::cout << "At least one landmark is NOT visible!" << std::endl;
+        std::cout << "********** At least one landmark is NOT visible!!!" << std::endl;
         return false;
     }
     
@@ -79,21 +79,21 @@ bool landmark_test(
     cam.cam_elev = elev;
     cam.cam_y = cam_xyz.y;
 
-    lm1.set_current_uv(uv1);
-    lm2.set_current_uv(uv2);
+    lm1.set_img_xy(img_xy1);
+    lm2.set_img_xy(img_xy2);
 
     double r;
     double ang;
     double rel_azim;
-    cam.triangulate(lm1.xyz, lm2.xyz, uv1, uv2, r, ang, rel_azim);
+    cam.triangulate(lm1.world_xyz.y, lm2.world_xyz.y, img_xy1, img_xy2, r, ang, rel_azim);
 
     // landmark has angle offset info
     // which is used to calculate world coords and azim
-    double u2 = lm2.uv[0];
+    double u2 = lm2.img_xy.x;
     world_azim = lm1.calc_world_azim(u2, ang, rel_azim);
-    pos_xz = lm1.calc_world_xz(u2, ang, r);
+    pos_xyz = lm1.calc_world_xyz(u2, ang, r);
 
-    std::cout << "Robot is at: [" << pos_xz[0] << ", " << pos_xz[1] << "] @ " << world_azim * cpoz::RAD2DEG << std::endl;
+    std::cout << "Robot is at: [" << pos_xyz.x << ", " << pos_xyz.z << "] @ " << world_azim * cpoz::RAD2DEG << std::endl;
     //
     //// this integer coordinate stuff is disabled for now...
     //if False:
@@ -128,27 +128,27 @@ void room_test(
 
         tMapStrToXYZRL& markx = all_landmark_maps[lm_map_name];
 
-        cv::Vec2d pos_xz;
+        cv::Point3d pos_xyz;
         double world_azim;
 
         const std::string& rkey = r.first;
-        cpoz::XYZLandmark lm1(mark1[rkey].xyz, mark1[rkey].adj_R, mark1[rkey].adj_L);
-        cpoz::XYZLandmark lm2(markx[rkey].xyz, markx[rkey].adj_R, markx[rkey].adj_L);
+        cpoz::XYZLandmark lm1(mark1[rkey].world_xyz, mark1[rkey].adj_R, mark1[rkey].adj_L);
+        cpoz::XYZLandmark lm2(markx[rkey].world_xyz, markx[rkey].adj_R, markx[rkey].adj_L);
 
         bool result = true;
-        bool flag = landmark_test(lm1, lm2, known_cam_xyz, cam_angs_rad, pos_xz, world_azim);
+        bool flag = landmark_test(lm1, lm2, known_cam_xyz, cam_angs_rad, pos_xyz, world_azim);
 
         if (!flag)
         {
             result = false;
         }
 
-        if (abs(pos_xz[0] - known_cam_xyz.x) >= EPS)
+        if (abs(pos_xyz.x - known_cam_xyz.x) >= EPS)
         {
             result = false;
         }
 
-        if (abs(pos_xz[1] - known_cam_xyz.z) >= EPS)
+        if (abs(pos_xyz.z - known_cam_xyz.z) >= EPS)
         {
             result = false;
         }
@@ -171,25 +171,25 @@ void test_room1()
 {
     {
         // LM name mapped to [world_azim, elev] for visibility at world (1, 1)
-        cv::Point3d xyz = { 1.0, -2.0, 1.0 };
-        room_test(lm_vis_1_1, xyz, "mark2");  // one case with one landmark not visible
-        room_test(lm_vis_1_1, xyz, "mark3");
-        room_test(lm_vis_1_1, xyz, "mark2", 10.0);
-        room_test(lm_vis_1_1, xyz, "mark3", 10.0);
+        cv::Point3d world_xyz = { 1.0, -2.0, 1.0 };
+        room_test(lm_vis_1_1, world_xyz, "mark2");  // one case with one landmark not visible
+        room_test(lm_vis_1_1, world_xyz, "mark3");
+        room_test(lm_vis_1_1, world_xyz, "mark2", 10.0);
+        room_test(lm_vis_1_1, world_xyz, "mark3", 10.0);
     }
 
     {
         // LM name mapped to[world_azim, elev] for visibility at world (1, 1)
-        cv::Point3d xyz = { 1.0, -3.0, 1.0 };
-        room_test(lm_vis_1_1, xyz, "mark2");
-        room_test(lm_vis_1_1, xyz, "mark3");
+        cv::Point3d world_xyz = { 1.0, -3.0, 1.0 };
+        room_test(lm_vis_1_1, world_xyz, "mark2");
+        room_test(lm_vis_1_1, world_xyz, "mark3");
     }
 
     {
         // LM name mapped to[world_azim, elev] for visibility at world(7, 6)
-        cv::Point3d xyz = { 7.0, -2.0, 6.0 };
-        room_test(lm_vis_7_6, xyz, "mark2");
-        room_test(lm_vis_7_6, xyz, "mark3");
+        cv::Point3d world_xyz = { 7.0, -2.0, 6.0 };
+        room_test(lm_vis_7_6, world_xyz, "mark2");
+        room_test(lm_vis_7_6, world_xyz, "mark3");
     }
 }
 
@@ -197,8 +197,8 @@ void test_room1()
 
 int main()
 {
-    std::cout << "CPOZ Test Application" << std::endl;
-    cpoz::CameraHelper cam;
-    cam.cal(".\\cal_set_2");
+    //std::cout << "CPOZ Test Application" << std::endl;
+    //cpoz::CameraHelper cam;
+    //cam.cal(".\\cal_set_2");
     test_room1();
 }

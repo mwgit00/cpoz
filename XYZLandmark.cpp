@@ -37,7 +37,7 @@ namespace cpoz
 
 
     XYZLandmark::XYZLandmark(
-        const cv::Point3d& xyz,
+        const cv::Point3d& world_xyz,
         const double u1max,
         const double u1min,
         const std::string& rs) :
@@ -45,35 +45,36 @@ namespace cpoz
         ang_u1min(u1min),
         name(rs)
     {
-        this->xyz = xyz;
-        this->uv = { 0.0, 0.0 };
+        this->world_xyz = world_xyz;
+        this->img_xy = { 0.0, 0.0 };
     }
 
 
-    void XYZLandmark::set_current_uv(const cv::Vec2d& rUV)
+    void XYZLandmark::set_img_xy(const cv::Point2d& rpt)
     {
-        uv = rUV;
+        img_xy = rpt;
     }
 
 
-    cv::Vec2d XYZLandmark::calc_world_xz(const double u, const double ang, const double r)
+    cv::Point3d XYZLandmark::calc_world_xyz(const double u, const double ang, const double r)
     {
         double ang_adj = 0.0;
-        if (uv[0] > u)
+        if (img_xy.x > u)
         {
-            ang_adj = ang_u1max * DEG2RAD - ang;
+            ang_adj = (ang_u1max * DEG2RAD) - ang;
         }
         else
         {
-            ang_adj = ang_u1min * DEG2RAD + ang;
+            ang_adj = (ang_u1min * DEG2RAD) + ang;
         }
 
-        // result is in X, Z plane so need negative sine in math below
+        // result is in X,Z plane so need negative sine in math below
         // to keep azimuth direction consistent (positive azimuth is clockwise)
-        double world_x = xyz.x + cos(ang_adj) * r;
-        double world_z = xyz.z - sin(ang_adj) * r;
+        double world_x = world_xyz.x + cos(ang_adj) * r;
+        double world_z = world_xyz.z - sin(ang_adj) * r;
 
-        return { world_x, world_z };
+        // robot is on the ground so Y is 0.0
+        return { world_x, 0.0, world_z };
     }
 
 
@@ -84,7 +85,7 @@ namespace cpoz
 
         // there's a 90 degree rotation from camera view to world angle
 
-        if (uv[0] > u)
+        if (img_xy.x > u)
         {
             offset_rad = ang_u1max * DEG2RAD;
             world_azim = offset_rad - ang - rel_azim - (CV_PI / 2.0);
@@ -96,6 +97,7 @@ namespace cpoz
         }
 
         // clunky way ensure 0 <= world_azim < 360
+        // two steps may be needed to account for all the subtractions above
         if (world_azim < 0.0) { world_azim += (2.0 * CV_PI); }
         if (world_azim < 0.0) { world_azim += (2.0 * CV_PI); }
 

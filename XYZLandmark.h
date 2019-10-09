@@ -41,23 +41,23 @@ namespace cpoz
         virtual ~XYZLandmark();
 
         XYZLandmark(
-            const cv::Point3d& xyz,
+            const cv::Point3d& world_xyz,
             const double u1max = 0.0,
             const double u1min = 0.0,
             const std::string & rs = "");
 
         // Assign pixel coordinates for latest Landmark sighting.
-        //    : param uv : (U, V) coordinates.
-        void set_current_uv(const cv::Vec2d& rUV);
+        // param uv : (U,V) coordinates.
+        void set_img_xy(const cv::Point2d& rpt);
 
         // Determine world position and pointing direction
         // given relative horizontal positions of landmarks
-        // and previous triangulation result(angle, range).
+        // and previous triangulation result (angle, range).
         // param u_var : Horizontal coordinate of variable landmark
         // param ang : Angle to this landmark
         // param r : Ground range to this landmark
-        // return X,Z in world coordinates
-        cv::Vec2d  calc_world_xz(const double u, const double ang, const double r);
+        // return (X,Y,Z) in world coordinates
+        cv::Point3d  calc_world_xyz(const double u, const double ang, const double r);
 
         // Convert camera's azimuth to LM to world azimuth.
         // Relative azimuth in camera view is also considered.
@@ -69,10 +69,10 @@ namespace cpoz
 
     public:
 
-        cv::Point3d xyz;      // world coordinates
-        double ang_u1max;   // adjustment when #1 is RIGHT (max u coord) landmark.
-        double ang_u1min;   // adjustment when #1 is LEFT (min u coord) landmark.
-        cv::Vec2d uv;       // pixel coordinates (u horizontal, v vertical)
+        cv::Point3d world_xyz;  // real-world coordinates
+        double ang_u1max;       // adjustment when #1 is RIGHT (max u coord) landmark.
+        double ang_u1min;       // adjustment when #1 is LEFT (min u coord) landmark.
+        cv::Point2d img_xy;     // image pixel coordinates (U or X horizontal, V or Y vertical)
         std::string name;
     };
 }

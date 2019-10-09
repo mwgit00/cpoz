@@ -29,7 +29,7 @@
 
 typedef struct _T_xyz_RL_struct
 {
-    cv::Point3f xyz;
+    cv::Point3d world_xyz;
     double adj_R;   // always negative
     double adj_L;   // always positive
 } T_xyz_RL;
