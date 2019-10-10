@@ -265,25 +265,24 @@ namespace cpoz
 
 
     void CameraHelper::triangulate(
-        const double Ya,
-        const double Yb,
+        const cv::Point3d& rXYZa,
+        const cv::Point3d& rXYZb,
         const cv::Point2d& rImgXYa,
         const cv::Point2d& rImgXYb,
-        double& range,
-        double& loc_angle,
-        double& rel_azim)
+        double& cam_azim,
+        cv::Point3d& rCamXYZ)
     {
         // camera is at known Y but landmark sightings can be at different heights
-        double known_Y_a = Ya - cam_y;
-        double known_Y_b = Yb - cam_y;
+        double known_Y_a = rXYZa.y - cam_y;
+        double known_Y_b = rXYZb.y - cam_y;
 
-        // find ground vector AC from location A to camera in X,Z plane
+        // find relative ground vector AC from landmark A to camera in X,Z plane
         // negation is required to go from A to camera
         cv::Point3d xyz_a = calc_cam_to_xyz(known_Y_a, rImgXYa, cam_elev);
         double x_ac = -xyz_a.x;
         double z_ac = -xyz_a.z;
 
-        // find ground vector AB from location A to location B in X,Z plane
+        // find relative ground vector AB from landmark A to landmark B in X,Z plane
         cv::Point3d xyz_b = calc_cam_to_xyz(known_Y_b, rImgXYb, cam_elev) - xyz_a;
         double x_ab = xyz_b.x;
         double z_ab = xyz_b.z;
@@ -293,13 +292,26 @@ namespace cpoz
         double mag_ab = sqrt((x_ab * x_ab) + (z_ab * z_ab));
         double cos_ac_ab = (x_ac * x_ab + z_ac * z_ab) / (mag_ac * mag_ab);
 
-        // determine angle between AC and AB
-        loc_angle = acos(cos_ac_ab);
+        // determine angle from AC to AB
+        double rel_world_ang = acos(cos_ac_ab);
 
         // calculate relative azim between location A and camera
-        rel_azim = atan(x_ac / z_ac);
+        double rel_cam_azim = atan2(z_ac, x_ac);
 
-        // finally stuff ground range of vector AC (from world location A to camera)
-        range = mag_ac;
+        // calculate angle formed by vector in X,Z plane
+        // from world XYZ for landmark A to world XYZ for landmark B 
+        double dz = rXYZb.z - rXYZa.z;
+        double dx = rXYZb.x - rXYZa.x;
+        double landmark_world_ang = atan2(dz, dx);
+
+        // then calculate world angle from A to camera
+        // use world angle and AC ground range to calulate X,Z offsets to find camera XYZ
+        double world_ang = landmark_world_ang - rel_world_ang;
+        double world_x = rXYZa.x + cos(world_ang) * mag_ac;
+        double world_z = rXYZa.z + sin(world_ang) * mag_ac;
+        rCamXYZ = { world_x, cam_y, world_z };
+
+        // TODO -- fix this
+        cam_azim = rel_cam_azim;
     }
 }

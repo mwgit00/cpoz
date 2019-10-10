@@ -50,23 +50,6 @@ namespace cpoz
         // param uv : (U,V) coordinates.
         void set_img_xy(const cv::Point2d& rpt);
 
-        // Determine world position and pointing direction
-        // given relative horizontal positions of landmarks
-        // and previous triangulation result (angle, range).
-        // param u_var : Horizontal coordinate of variable landmark
-        // param ang : Angle to this landmark
-        // param r : Ground range to this landmark
-        // return (X,Y,Z) in world coordinates
-        cv::Point3d  calc_world_xyz(const double u, const double ang, const double r);
-
-        // Convert camera's azimuth to LM to world azimuth.
-        // Relative azimuth in camera view is also considered.
-        // param u_var : U coordinate of variable LM
-        // param ang : Angle between camera and LM1-to-LM2 vector
-        // param rel_azim : Relative azimuth to LM1 as seen in image
-        // return : World azimuth (radians)
-        double calc_world_azim(double u, double ang, double rel_azim);
-
     public:
 
         cv::Point3d world_xyz;  // real-world coordinates

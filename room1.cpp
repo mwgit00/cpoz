@@ -48,10 +48,9 @@
 //  | A           D |
 //  0,0 -*-----*- 13,0 +X
 //
-// world location is in X,Z plane
-// view is looking down at the room 
-// positive rotation about Y is clockwise
-// the angle from A to B is 0 degrees
+// consider camera looking straight ahead
+// then world location (on floor) is in X,Z plane
+// view in above diagram is looking down at the room 
 //
 // landmarks are higher on the AB side
 // ceiling slopes down to E then is flat again

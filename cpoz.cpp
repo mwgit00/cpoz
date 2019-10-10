@@ -82,16 +82,15 @@ bool landmark_test(
     lm1.set_img_xy(img_xy1);
     lm2.set_img_xy(img_xy2);
 
-    double r;
-    double ang;
-    double rel_azim;
-    cam.triangulate(lm1.world_xyz.y, lm2.world_xyz.y, img_xy1, img_xy2, r, ang, rel_azim);
-
-    // landmark has angle offset info
-    // which is used to calculate world coords and azim
-    double u2 = lm2.img_xy.x;
-    world_azim = lm1.calc_world_azim(u2, ang, rel_azim);
-    pos_xyz = lm1.calc_world_xyz(u2, ang, r);
+    // landmark with smallest img X is always first parameter
+    if (img_xy1.x < img_xy2.x)
+    {
+        cam.triangulate(lm1.world_xyz, lm2.world_xyz, img_xy1, img_xy2, world_azim, pos_xyz);
+    }
+    else
+    {
+        cam.triangulate(lm2.world_xyz, lm1.world_xyz, img_xy2, img_xy1, world_azim, pos_xyz);
+    }
 
     std::cout << "Robot is at: [" << pos_xyz.x << ", " << pos_xyz.z << "] @ " << world_azim * cpoz::RAD2DEG << std::endl;
     //

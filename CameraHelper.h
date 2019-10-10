@@ -89,21 +89,19 @@ namespace cpoz
             const double cam_elev_rad);
 
         // Use known Y of landmarks A and B and their image coordinates to perform triangulation.
-        // param: Ya known Y of world location A
-        // param: Yb known Y of world location B
+        // param: rXYZa known world location A
+        // param: rXYZb known world location B
         // param: rImgXYa reference to image coords for landmark A
         // param: rImgXYb reference to image coords for landmark B
-        // param: range X,Z plane ground range from camera to A
-        // param: loc_angle angle about A from B to camera
-        // param: rel_azim azimuth angle of XYZ1 relative to camera
+        // param: cam_azim azimuth angle of camera in world
+        // param: rCamXYZ position of camera in world
         void triangulate(
-            const double Ya,
-            const double Yb,
+            const cv::Point3d& rXYZa,
+            const cv::Point3d& rXYZb,
             const cv::Point2d& rImgXYa,
             const cv::Point2d& rImgXYb,
-            double& range,
-            double& loc_angle,
-            double& rel_azim);
+            double& cam_azim,
+            cv::Point3d& rCamXYZ);
 
     public:
 
