@@ -56,7 +56,9 @@
 // ceiling slopes down to E then is flat again
 // so heights of some landmarks had to be extrapolated
 // height is negative to be consistent with right-hand coordinate system
-// (+X "cross" +Y points in +Z direction, so +Y points down into floor)
+//
+// +X "cross" +Y points in +Z direction, so +Y points down into floor
+// a positive rotation about Y will be counterclockwise
 
 
 const double y_ab = -10.0;
@@ -64,49 +66,47 @@ const double y_def = -8.0;
 const double y_offs = -2.0;
 
 
-// the fixed landmarks
-tMapStrToXYZRL mark1 =
-    {{"A", {{0.0, y_ab, 0.0}, 0.0, 270.0}},
-    {"B", {{0.0, y_ab, 16.0}, -270.0, 0.0}},
-    {"C", {{8.0, y_ab + 1.6, 16.0}, -180.0, 45.0}},
-    {"D", {{13.0, y_def, 0.0}, -90.0, 180.0}},
-    {"E", {{10.0, y_def, 9.0}, -90.0, 0.0}},
-    {"F", {{13.0, y_def, 6.0}, -90.0, 90.}}};
+// the so-called "fixed" landmarks
+tMapStrToXYZ mark1 =
+    {{"A", {0.0, y_ab, 0.0}},
+    {"B", {0.0, y_ab, 16.0}},
+    {"C", {8.0, y_ab + 1.6, 16.0}},
+    {"D", {13.0, y_def, 0.0}},
+    {"E", {10.0, y_def, 9.0}},
+    {"F", {13.0, y_def, 6.0}}};
 
 // landmarks that appear to left of the fixed landmarks
-// (u1 of fixed LM is MAX, or greater than u2 of this LM)
-tMapStrToXYZRL mark2 =
-    {{"A", {{2.0, y_ab + 0.4, 0.0}, 0.0, 0.0}},
-    {"B", {{0.0, y_ab, 14.0}, 0.0, 0.0}},
-    {"C", {{6.0, y_ab + 1.2, 16.0}, 0.0, 0.0}},
-    {"D", {{13.0, y_def, 2.0}, 0.0, 0.0}},
-    {"E", {{10.0, y_def, 11.0}, 0.0, 0.0}},
-    {"F", {{13.0, y_def + 1.0, 7.0}, 0.0, 0.0}}};
+tMapStrToXYZ mark2 =
+    {{"A", {2.0, y_ab + 0.4, 0.0}},
+    {"B", {0.0, y_ab, 14.0}},
+    {"C", {6.0, y_ab + 1.2, 16.0}},
+    {"D", {13.0, y_def, 2.0}},
+    {"E", {10.0, y_def, 11.0}},
+    {"F", {13.0, y_def + 1.0, 7.0}}};
 
 // landmarks that appear to right of the fixed landmarks
-// (u1 of fixed LM is MIN, or less than u2 of this LM)
-tMapStrToXYZRL mark3 =
-    {{"A", {{0.0, y_ab, 2.0}, 0.0, 0.0}},
-    {"B", {{2.0, y_ab + 0.4, 16.0}, 0.0, 0.0}},
-    {"C", {{10.0, y_def, 14.0}, 0.0, 0.0}},
-    {"D", {{11.0, y_def, 0.0}, 0.0, 0.0}},
-    {"E", {{12.0, y_def, 9.0}, 0.0, 0.0}},
-    {"F", {{13.0, y_def + 1.0, 5.0}, 0.0, 0.0}}};
+tMapStrToXYZ mark3 =
+    {{"A", {0.0, y_ab, 2.0}},
+    {"B", {2.0, y_ab + 0.4, 16.0}},
+    {"C", {10.0, y_def, 14.0}},
+    {"D", {11.0, y_def, 0.0}},
+    {"E", {12.0, y_def, 9.0}},
+    {"F", {13.0, y_def + 1.0, 5.0}}};
 
 // landmarks that appear below the fixed landmarks
-tMapStrToXYZRL markb =
-    {{"A", {{0.0, y_ab - y_offs, 0.0}, 0.0, 270.0}},
-    {"B", {{0.0, y_ab - y_offs, 16.0}, -270.0, 0.0}},
-    {"C", {{8.0, y_ab + 1.6 - y_offs, 16.0}, -180.0, 45.0}},
-    {"D", {{13.0, y_def - y_offs, 0.0}, -90.0, 180.0}},
-    {"E", {{10.0, y_def - y_offs, 9.0}, -90.0, 0.0}},
-    {"F", {{13.0, y_def - y_offs, 6.0}, -90.0, 90.}}};
+tMapStrToXYZ markb =
+    {{"A", {0.0, y_ab - y_offs, 0.0}},
+    {"B", {0.0, y_ab - y_offs, 16.0}},
+    {"C", {8.0, y_ab + 1.6 - y_offs, 16.0}},
+    {"D", {13.0, y_def - y_offs, 0.0}},
+    {"E", {10.0, y_def - y_offs, 9.0}},
+    {"F", {13.0, y_def - y_offs, 6.0}}};
 
-tMapStrToMapStrToXYZRL all_landmark_maps =
-    { {"mark1", mark1},
+tMapStrToMapStrToXYZ all_landmark_maps =
+    {{"mark1", mark1},
     {"mark2", mark2},
     {"mark3", mark3},
-    {"markb", markb} };
+    {"markb", markb}};
 
 // azimuth and elevation of camera so that landmarks
 // are visible from (1, 1) at height -3

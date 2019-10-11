@@ -42,8 +42,6 @@ namespace cpoz
 
         XYZLandmark(
             const cv::Point3d& world_xyz,
-            const double u1max = 0.0,
-            const double u1min = 0.0,
             const std::string & rs = "");
 
         // Assign pixel coordinates for latest Landmark sighting.
@@ -53,8 +51,6 @@ namespace cpoz
     public:
 
         cv::Point3d world_xyz;  // real-world coordinates
-        double ang_u1max;       // adjustment when #1 is RIGHT (max u coord) landmark.
-        double ang_u1min;       // adjustment when #1 is LEFT (min u coord) landmark.
         cv::Point2d img_xy;     // image pixel coordinates (U or X horizontal, V or Y vertical)
         std::string name;
     };

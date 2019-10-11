@@ -38,11 +38,7 @@ namespace cpoz
 
     XYZLandmark::XYZLandmark(
         const cv::Point3d& world_xyz,
-        const double u1max,
-        const double u1min,
         const std::string& rs) :
-        ang_u1max(u1max),
-        ang_u1min(u1min),
         name(rs)
     {
         this->world_xyz = world_xyz;

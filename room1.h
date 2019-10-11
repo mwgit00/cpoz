@@ -27,23 +27,16 @@
 #include <string>
 #include <opencv2/imgproc.hpp>
 
-typedef struct _T_xyz_RL_struct
-{
-    cv::Point3d world_xyz;
-    double adj_R;   // always negative
-    double adj_L;   // always positive
-} T_xyz_RL;
-
-typedef std::map<std::string, T_xyz_RL> tMapStrToXYZRL;
+typedef std::map<std::string, cv::Point3d> tMapStrToXYZ;
 typedef std::map<std::string, cv::Vec2d> tMapStrToAZEL;
-typedef std::map<std::string, tMapStrToXYZRL> tMapStrToMapStrToXYZRL;
+typedef std::map<std::string, tMapStrToXYZ> tMapStrToMapStrToXYZ;
 
-extern tMapStrToXYZRL mark1;
-extern tMapStrToXYZRL mark2;
-extern tMapStrToXYZRL mark3;
-extern tMapStrToXYZRL markb;
+extern tMapStrToXYZ mark1;
+extern tMapStrToXYZ mark2;
+extern tMapStrToXYZ mark3;
+extern tMapStrToXYZ markb;
 
-extern tMapStrToMapStrToXYZRL all_landmark_maps;
+extern tMapStrToMapStrToXYZ all_landmark_maps;
 
 extern tMapStrToAZEL lm_vis_1_1;
 extern tMapStrToAZEL lm_vis_7_6;

@@ -24,6 +24,7 @@
 #define CAMERA_HELPER_H_
 
 #include <opencv2/imgproc.hpp>
+#include "XYZLandmark.h"
 
 
 namespace cpoz
@@ -89,23 +90,18 @@ namespace cpoz
             const double cam_elev_rad);
 
         // Use known Y of landmarks A and B and their image coordinates to perform triangulation.
-        // param: rXYZa known world location A
-        // param: rXYZb known world location B
-        // param: rImgXYa reference to image coords for landmark A
-        // param: rImgXYb reference to image coords for landmark B
+        // param: lmA Landmark A info
+        // param: lmB Landmark B info
         // param: cam_azim azimuth angle of camera in world
         // param: rCamXYZ position of camera in world
-        void triangulate(
-            const cv::Point3d& rXYZa,
-            const cv::Point3d& rXYZb,
-            const cv::Point2d& rImgXYa,
-            const cv::Point2d& rImgXYb,
-            double& cam_azim,
-            cv::Point3d& rCamXYZ);
+        void triangulate_landmarks(
+            const XYZLandmark& lmA,
+            const XYZLandmark& lmB,
+            cv::Point3d& rCamXYZ,
+            double& cam_azim);
 
     public:
 
-        // TODO -- make it accept OpenCV intrinsic camera calib matrix
         // these must be updated prior to triangulation
         double cam_y;       // known camera height
         double cam_elev;    // known camera elevation (radians)

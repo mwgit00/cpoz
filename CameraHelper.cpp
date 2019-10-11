@@ -154,8 +154,8 @@ namespace cpoz
         // Creates matrix for rotating AXES.
         // With axis pointing out, positive rotation is clockwise.
         // Uses right-handed "airplane" conventions:
-        //   - x, forward, roll, phi
-        //   - y, right, pitch, theta
+        //   - x, forward, roll, phi (elevation)
+        //   - y, right, pitch, theta (azimuth)
         //   - z, down, yaw, psi
         //
         // param roll : roll angle (radians)
@@ -264,30 +264,28 @@ namespace cpoz
     }
 
 
-    void CameraHelper::triangulate(
-        const cv::Point3d& rXYZa,
-        const cv::Point3d& rXYZb,
-        const cv::Point2d& rImgXYa,
-        const cv::Point2d& rImgXYb,
-        double& cam_azim,
-        cv::Point3d& rCamXYZ)
+    void CameraHelper::triangulate_landmarks(
+        const XYZLandmark& lmA,
+        const XYZLandmark& lmB,
+        cv::Point3d& rCamXYZ,
+        double& cam_azim)
     {
-        // camera is at known Y but landmark sightings can be at different heights
-        double known_Y_a = rXYZa.y - cam_y;
-        double known_Y_b = rXYZb.y - cam_y;
-
+        // let camera be at 0,0 in X,Z plane
+        // landmark sightings will be offset by the known camera Y
+        rCamXYZ = { 0.0, cam_y, 0.0 };
+        
         // find relative ground vector AC from landmark A to camera in X,Z plane
-        // negation is required to go from A to camera
-        cv::Point3d xyz_a = calc_cam_to_xyz(known_Y_a, rImgXYa, cam_elev);
-        double x_ac = -xyz_a.x;
-        double z_ac = -xyz_a.z;
+        cv::Point3d xyz_a = calc_cam_to_xyz(lmA.world_xyz.y - cam_y, lmA.img_xy, cam_elev);
+        double x_ac = rCamXYZ.x - xyz_a.x;
+        double z_ac = rCamXYZ.z - xyz_a.z;
 
         // find relative ground vector AB from landmark A to landmark B in X,Z plane
-        cv::Point3d xyz_b = calc_cam_to_xyz(known_Y_b, rImgXYb, cam_elev) - xyz_a;
-        double x_ab = xyz_b.x;
-        double z_ab = xyz_b.z;
+        cv::Point3d xyz_b = calc_cam_to_xyz(lmB.world_xyz.y - cam_y, lmB.img_xy, cam_elev);
+        double x_ab = xyz_b.x - xyz_a.x;
+        double z_ab = xyz_b.z - xyz_a.z;
 
-        // calculate cosine between vectors AC and AB (dot product divided by magnitudes)
+        // calculate cosine between vectors AC and AB
+        // this is the dot product divided by magnitudes
         double mag_ac = sqrt((x_ac * x_ac) + (z_ac * z_ac));
         double mag_ab = sqrt((x_ab * x_ab) + (z_ab * z_ab));
         double cos_ac_ab = (x_ac * x_ab + z_ac * z_ab) / (mag_ac * mag_ab);
@@ -295,23 +293,27 @@ namespace cpoz
         // determine angle from AC to AB
         double rel_world_ang = acos(cos_ac_ab);
 
-        // calculate relative azim between location A and camera
+        // calculate angle that camera is "rotated away from" landmark A
+        // if it was pointed directly towards the landmark then the angle would be 0
         double rel_cam_azim = atan2(z_ac, x_ac);
 
         // calculate angle formed by vector in X,Z plane
         // from world XYZ for landmark A to world XYZ for landmark B 
-        double dz = rXYZb.z - rXYZa.z;
-        double dx = rXYZb.x - rXYZa.x;
+        double dz = lmB.world_xyz.z - lmA.world_xyz.z;
+        double dx = lmB.world_xyz.x - lmA.world_xyz.x;
         double landmark_world_ang = atan2(dz, dx);
 
         // then calculate world angle from A to camera
-        // use world angle and AC ground range to calulate X,Z offsets to find camera XYZ
+        // use world angle and AC ground range to calulate X,Z offsets
+        // use offsets to find camera real-world XYZ
         double world_ang = landmark_world_ang - rel_world_ang;
-        double world_x = rXYZa.x + cos(world_ang) * mag_ac;
-        double world_z = rXYZa.z + sin(world_ang) * mag_ac;
+        double world_x = lmA.world_xyz.x + cos(world_ang) * mag_ac;
+        double world_z = lmA.world_xyz.z + sin(world_ang) * mag_ac;
         rCamXYZ = { world_x, cam_y, world_z };
 
-        // TODO -- fix this
-        cam_azim = rel_cam_azim;
+        // determine camera's real-world azimuth in X,Z plane
+        cam_azim = rel_cam_azim - world_ang;
+        if (cam_azim < 0.0) cam_azim += (CV_PI * 2.0);
+        if (cam_azim >= (CV_PI * 2.0)) cam_azim -= (CV_PI * 2.0);
     }
 }
