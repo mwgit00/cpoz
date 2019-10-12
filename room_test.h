@@ -20,17 +20,42 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef ROOM_1_H_
-#define ROOM_1_H_
+#ifndef ROOM_TEST_H_
+#define ROOM_TEST_H_
 
-#include "room_test.h"
+#include <map>
+#include <string>
+#include <opencv2/imgproc.hpp>
+#include "XYZLandmark.h"
 
-namespace room1
-{
-    extern tMapStrToMapStrToXYZ landmark_maps;
+// consider camera looking straight ahead
+// then world location (on floor) is in X,Z plane
+// view in room diagrams (see comments) is looking down at the room
+//
+// +X "cross" +Y points in +Z direction, so +Y points down into floor
+// a positive rotation about Y will be counterclockwise
 
-    extern tMapStrToAZEL lm_vis_1_1;
-    extern tMapStrToAZEL lm_vis_7_6;
-}
+typedef std::map<std::string, cv::Point3d> tMapStrToXYZ;
+typedef std::map<std::string, cv::Vec2d> tMapStrToAZEL;
+typedef std::map<std::string, tMapStrToXYZ> tMapStrToMapStrToXYZ;
 
-#endif // ROOM_1_H_
+bool landmark_test(
+    cpoz::XYZLandmark& lm1,
+    cpoz::XYZLandmark& lm2,
+    const cv::Point3d& cam_xyz,
+    const cv::Vec2d& cam_angs_rad,
+    cv::Point3d& pos_xyz,
+    double& world_azim);
+
+void room_test(
+    const tMapStrToMapStrToXYZ& lm_maps,
+    const tMapStrToAZEL& lm_vis,
+    const cv::Point3d& known_cam_xyz,
+    const std::string& lm_map_name_A,
+    const std::string& lm_map_name_B,
+    const double elev_offset = 0.0);
+
+void reset_counts();
+void show_tally();
+
+#endif // ROOM_TEST_H_

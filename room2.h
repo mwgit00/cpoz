@@ -20,17 +20,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef ROOM_1_H_
-#define ROOM_1_H_
+#ifndef ROOM_2_H_
+#define ROOM_2_H_
 
 #include "room_test.h"
 
-namespace room1
+namespace room2
 {
     extern tMapStrToMapStrToXYZ landmark_maps;
-
-    extern tMapStrToAZEL lm_vis_1_1;
-    extern tMapStrToAZEL lm_vis_7_6;
+    extern tMapStrToAZEL lm_vis_5_8;
+    extern tMapStrToAZEL lm_vis_1_8;
 }
 
-#endif // ROOM_1_H_
+#endif // ROOM_2_H_
