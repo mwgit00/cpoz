@@ -36,8 +36,8 @@ namespace cpoz
         
         cx = 320;
         cy = 240;
-        fx = 554; // 60 deg hfov(30.0)
-        fy = 554; // 46 deg vfov(23.0)
+        fx = 819;// 554; // 60 deg hfov(30.0)
+        fy = 819;// 554; // 46 deg vfov(23.0)
 
         cam_matrix = cv::Mat::eye({ 3, 3 }, CV_64F);
         cam_matrix.at<double>(0, 0) = fx;
@@ -86,10 +86,23 @@ namespace cpoz
             // so get sub-pixel corner locations
             for (size_t i = 0; i < vcalfiles.size(); i++)
             {
-                std::string sfile = rs + "\\" + vcalfiles[i];
+                std::string sfile = vcalfiles[i];
                 cv::Mat img = cv::imread(sfile.c_str(), cv::IMREAD_GRAYSCALE);
                 std::vector<cv::Point2f>& rv = vvcalpts[i];
                 cv::cornerSubPix(img, rv, { 5,5 }, { -1,-1 }, tc_corners);
+#if 0
+                cv::Point prev(0, 0);
+                for (size_t j = 0; j < rv.size(); j++)
+                {
+                    cv::Point pt(rv[j]);
+                    cv::circle(img, pt, 9, 255);
+                    cv::line(img, prev, pt, 255, 1);
+                    prev = pt;
+                }
+                std::ostringstream oss;
+                oss << "foo" << i << ".png";
+                cv::imwrite(oss.str(), img);
+#endif
             }
 
             std::vector<std::vector<cv::Point3f>> object_pts(vvcalpts.size(), vgridpts);
@@ -206,8 +219,9 @@ namespace cpoz
         if (fsin.isOpened())
         {
             fsin["image_size"] >> img_sz;
-            fsin["cam_matrix"] >> cam_matrix;
+            fsin["camera_matrix"] >> cam_matrix;
             fsin["distortion_coefficients"] >> dist_coeffs;
+            result = true;
         }
         return result;
     }

@@ -35,10 +35,12 @@
 #include "room1.h"
 #include "room2.h"
 #include "BGRLandmark.h"
+#include "CameraHelper.h"
+#include "XYZLandmark.h"
 
 using namespace cv;
 
-#define CAL_PATH    ".\\calib\\"    // user may need to create or change this
+#define CALIB_PATH  ".\\calib\\"    // user may need to create or change this
 #define MOVIE_PATH  ".\\movie\\"    // user may need to create or change this
 #define DATA_PATH   ".\\data\\"     // user may need to change this
 
@@ -51,6 +53,7 @@ using namespace cv;
 
 static bool is_rec_enabled = false;
 static bool is_cal_enabled = false;
+static bool is_loc_enabled = false;
 const char * stitle = "CPOZ Test Application";
 int n_record_ctr = 0;
 
@@ -140,6 +143,7 @@ bool wait_and_check_keys()
             {
             case 'c': is_cal_enabled = !is_cal_enabled; break;
             case 'r': is_rec_enabled = !is_rec_enabled; break;
+            case 'l': is_loc_enabled = !is_loc_enabled; break;
             default: break;
             }
         }
@@ -175,8 +179,16 @@ void loop_cal(void)
     std::vector<std::vector<cv::Vec2f>> vvcal;
     std::vector<std::string> vcalfiles;
     std::set<int> cal_label_set;
-    int cal_good_ct;
-    int cal_ct;
+    int cal_good_ct = 0;
+    int cal_ct = 0;
+
+    cpoz::XYZLandmark lm0({-6, -72.0, 0 });
+    cpoz::XYZLandmark lm1({6, -71.5, 0});
+
+    cpoz::CameraHelper cam;
+    //cam.load("cal_final.yaml");
+    cam.cam_y = -44.0;
+    cam.cam_elev = 0.0;
 
     Size capture_size;
     Point ptmax;
@@ -239,6 +251,36 @@ void loop_cal(void)
                 }
             }
 
+            if (is_loc_enabled)
+            {
+                if (qinfo.size() == 2)
+                {
+                    // refine corner positions
+                    std::vector<cv::Point2f> vpt;
+                    vpt.push_back(qinfo[0].ctr);
+                    vpt.push_back(qinfo[1].ctr);
+                    cv::TermCriteria tc_corners(
+                        cv::TermCriteria::MAX_ITER | cv::TermCriteria::EPS,
+                        50, // max number of iterations
+                        0.0001);
+                    cv::cornerSubPix(img_gray, vpt, { 5,5 }, { -1,-1 }, tc_corners);
+                    lm0.set_img_xy(vpt[0]);
+                    lm1.set_img_xy(vpt[1]);
+                    
+                    cv::Point3d xyz;
+                    double azim;
+                    if (lm0.img_xy.x < lm1.img_xy.x)
+                    {
+                        cam.triangulate_landmarks(lm0, lm1, xyz, azim);
+                    }
+                    else
+                    {
+                        cam.triangulate_landmarks(lm1, lm0, xyz, azim);
+                    }
+                    std::cout << xyz.x << ", " << xyz.z << " " << azim * cpoz::RAD2DEG << std::endl;
+                }
+            }
+
             // in this loop, use mask flag as calibration grab mode
             // the image is dumped to file if 12 unique landmarks found (3x4 pattern)
             // then user must "hide" some landmarks to trigger another grab
@@ -253,7 +295,7 @@ void loop_cal(void)
                         {
                             // save snapshot of image
                             std::ostringstream osx;
-                            osx << MOVIE_PATH << "img_" << std::setfill('0') << std::setw(5) << cal_ct << ".png";
+                            osx << CALIB_PATH << "img_" << std::setfill('0') << std::setw(5) << cal_ct << ".png";
                             std::string sfile = osx.str();
                             imwrite(sfile, img_viewer);
                             vcalfiles.push_back(sfile);
@@ -330,7 +372,7 @@ int main()
 {
     std::cout << stitle << std::endl;
     //cpoz::CameraHelper cam;
-    //cam.cal(".\\cal_set_2");
+    //cam.cal(".\\calib");
     test_room1();
     test_room2();
     loop_cal();
