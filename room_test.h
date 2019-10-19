@@ -39,6 +39,8 @@ typedef std::map<std::string, cv::Point3d> tMapStrToXYZ;
 typedef std::map<std::string, cv::Vec2d> tMapStrToAZEL;
 typedef std::map<std::string, tMapStrToXYZ> tMapStrToMapStrToXYZ;
 
+void foo();
+
 bool landmark_test(
     cpoz::XYZLandmark& lm1,
     cpoz::XYZLandmark& lm2,

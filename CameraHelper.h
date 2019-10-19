@@ -65,6 +65,19 @@ namespace cpoz
     {
     public:
 
+        typedef struct _T_TRIANG_SOL_struct
+        {
+            double ang_180_err;
+            cv::Vec3d ang_ABC;
+            cv::Vec3d len_abc;
+            cv::Vec3d ang0_ABC;
+            cv::Vec3d len0_abc;
+            cv::Vec3d ang1_ABC;
+            cv::Vec3d len1_abc;
+            cv::Vec3d gnd_rng_to_LM1;
+            cv::Vec3d gnd_rng_to_LM2;
+        } T_TRIANG_SOL;
+
         CameraHelper();
         virtual ~CameraHelper();
 
@@ -80,7 +93,22 @@ namespace cpoz
         bool is_visible(const cv::Point2d& rImgXY) const;
 
         // project 3D world point (X,Y,Z) to image plane (X,Y)
-        cv::Point2d project_world_xyz_to_img_xy(const cv::Point3d& rXYZ) const;
+        // this is mainly just for testing the triangulation
+        cv::Point2d project_xyz_to_img_xy(const cv::Point3d& rXYZ) const;
+
+
+        // determine normalized 3D coordinates (X,Y,1) based on image coordinates
+        cv::Point3d undistort_img_xy_to_xyz(const cv::Point2d& rImgXY) const;
+
+        // Use known XYZ of two landmarks and their image coordinates to perform triangulation.
+        // param: rLM1 Landmark 1 info
+        // param: rLM2 Landmark 2 info
+        // param: rsol Solution
+        void CameraHelper::triangulate_landmarks(
+            const XYZLandmark& rLM1,
+            const XYZLandmark& rLM2,
+            T_TRIANG_SOL& rsol) const;
+
 
         // calculate vector from camera to world point (X,Y,Z)
         // given its known world Y, image coords (X,Y), and camera elevation
@@ -94,7 +122,7 @@ namespace cpoz
         // param: lmB Landmark B info
         // param: cam_azim azimuth angle of camera in world
         // param: rCamXYZ position of camera in world
-        void triangulate_landmarks(
+        void triangulate_landmarks_old(
             const XYZLandmark& lmA,
             const XYZLandmark& lmB,
             cv::Point3d& rCamXYZ,

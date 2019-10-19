@@ -271,11 +271,11 @@ void loop_cal(void)
                     double azim;
                     if (lm0.img_xy.x < lm1.img_xy.x)
                     {
-                        cam.triangulate_landmarks(lm0, lm1, xyz, azim);
+                        cam.triangulate_landmarks_old(lm0, lm1, xyz, azim);
                     }
                     else
                     {
-                        cam.triangulate_landmarks(lm1, lm0, xyz, azim);
+                        cam.triangulate_landmarks_old(lm1, lm0, xyz, azim);
                     }
                     std::cout << xyz.x << ", " << xyz.z << " " << azim * cpoz::RAD2DEG << std::endl;
                 }
@@ -371,6 +371,8 @@ void loop_cal(void)
 int main()
 {
     std::cout << stitle << std::endl;
+    foo();
+    return 0;
     //cpoz::CameraHelper cam;
     //cam.cal(".\\calib");
     test_room1();

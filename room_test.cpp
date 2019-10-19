@@ -32,6 +32,74 @@ static int pass_ct = 0;
 static int test_ct = 0;
 static cpoz::CameraHelper cam;
 
+void foo()
+{
+    // X,Z and azim are unknowns that must be solved
+    cv::Point3d cam_xyz({ -12, -48, 120 });
+    double azim = 170 * cpoz::DEG2RAD; // use 180
+#if 0
+    double elev = atan(-cam_xyz.y / cam_xyz.z);
+#else
+    double elev = 10 * cpoz::DEG2RAD;
+#endif
+
+    //cpoz::XYZLandmark lm1({ 6, -96, 0 });
+    //cpoz::XYZLandmark lm2({ -6, -84, 0 });
+    cpoz::XYZLandmark lm1({ 6, -96, 0 });
+    cpoz::XYZLandmark lm2({ -6, -96, 0 });
+
+    // determine pixel location of LM 1
+    cv::Point3d xyz1 = lm1.world_xyz - cam_xyz;
+    cv::Point3d xyz1_rot = cam.calc_xyz_after_rotation(xyz1, elev, azim, 0);
+    cv::Point2d img_xy1 = cam.project_xyz_to_img_xy(xyz1_rot);
+
+    // determine pixel location of LM 2
+    cv::Point3d xyz2 = lm2.world_xyz - cam_xyz;
+    cv::Point3d xyz2_rot = cam.calc_xyz_after_rotation(xyz2, elev, azim, 0);
+    cv::Point2d img_xy2 = cam.project_xyz_to_img_xy(xyz2_rot);
+
+    // dump the image X,Y points and perform visibility check
+    std::cout << std::endl;
+    std::cout << "Image Landmark 1:  " << img_xy1 << std::endl;
+    std::cout << "Image Landmark 2:  " << img_xy2 << std::endl;
+    if (cam.is_visible(img_xy1) && cam.is_visible(img_xy2))
+    {
+        std::cout << "Both landmarks are visible.  ";
+    }
+
+    lm1.set_img_xy(img_xy1);
+    lm2.set_img_xy(img_xy2);
+
+    // guesses
+    cpoz::CameraHelper cam;
+    double pos_elev = 10 * cpoz::DEG2RAD;
+    cam.cam_elev = pos_elev;
+    cam.cam_y = -48;
+
+    cpoz::CameraHelper::T_TRIANG_SOL sol;
+    cam.triangulate_landmarks(lm1, lm2, sol);
+
+    std::cout << (sol.ang_180_err) * cpoz::RAD2DEG << std::endl;
+    std::cout << sol.ang_ABC * cpoz::RAD2DEG << std::endl;
+    std::cout << sol.len_abc << std::endl;
+    std::cout << sol.ang0_ABC * cpoz::RAD2DEG << std::endl;
+    std::cout << sol.len0_abc << std::endl;
+    std::cout << sol.ang1_ABC * cpoz::RAD2DEG << std::endl;
+    std::cout << sol.len1_abc << std::endl;
+
+    std::cout << sol.gnd_rng_to_LM1 << std::endl;
+    std::cout << sol.gnd_rng_to_LM2 << std::endl;
+
+    cv::Point3d pos_xyz;
+    double pos_azim;
+    cam.triangulate_landmarks_old(lm1, lm2, pos_xyz, pos_azim);
+    std::cout << "Robot is at: [" << pos_xyz.x << ", " << pos_xyz.z << "] @ " << pos_azim * cpoz::RAD2DEG << std::endl;
+
+    cv::Point2d foopt;
+
+    std::cout << "foo" << std::endl;
+}
+
 
 bool landmark_test(
     cpoz::XYZLandmark& lm1,
@@ -54,12 +122,12 @@ bool landmark_test(
     // determine pixel location of LM 1
     cv::Point3d xyz1 = lm1.world_xyz - cam_xyz;
     cv::Point3d xyz1_rot = cam.calc_xyz_after_rotation(xyz1, elev, azim, 0);
-    cv::Point2d img_xy1 = cam.project_world_xyz_to_img_xy(xyz1_rot);
+    cv::Point2d img_xy1 = cam.project_xyz_to_img_xy(xyz1_rot);
 
     // determine pixel location of LM 2
     cv::Point3d xyz2 = lm2.world_xyz - cam_xyz;
     cv::Point3d xyz2_rot = cam.calc_xyz_after_rotation(xyz2, elev, azim, 0);
-    cv::Point2d img_xy2 = cam.project_world_xyz_to_img_xy(xyz2_rot);
+    cv::Point2d img_xy2 = cam.project_xyz_to_img_xy(xyz2_rot);
 
     // dump the image X,Y points and perform visibility check
     std::cout << std::endl;
@@ -89,11 +157,11 @@ bool landmark_test(
     // landmark with smallest img X is always first parameter
     if (img_xy1.x < img_xy2.x)
     {
-        cam.triangulate_landmarks(lm1, lm2, pos_xyz, world_azim);
+        cam.triangulate_landmarks_old(lm1, lm2, pos_xyz, world_azim);
     }
     else
     {
-        cam.triangulate_landmarks(lm2, lm1, pos_xyz, world_azim);
+        cam.triangulate_landmarks_old(lm2, lm1, pos_xyz, world_azim);
     }
 
     std::cout << "Robot is at: [" << pos_xyz.x << ", " << pos_xyz.z << "] @ " << world_azim * cpoz::RAD2DEG << std::endl;
