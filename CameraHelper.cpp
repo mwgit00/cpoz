@@ -31,9 +31,9 @@ namespace cpoz
     {
         // create ideal camera calibration data for testing
         // real calibration data must be applied with load method
-        
+
         img_sz = { 640, 480 };
-        
+
         cx = 320;
         cy = 240;
         fx = 819;// 554; // 60 deg hfov(30.0)
@@ -44,7 +44,7 @@ namespace cpoz
         cam_matrix.at<double>(1, 1) = fy;
         cam_matrix.at<double>(0, 2) = cx;
         cam_matrix.at<double>(1, 2) = cy;
-        
+
         std::vector<double> dc = { 0,0,0,0,0 };
         dist_coeffs = cv::Mat(dc).t();
     }
@@ -265,6 +265,7 @@ namespace cpoz
         return{ output_xy[0].x, output_xy[0].y, 1.0 };
     }
 
+
     void CameraHelper::triangulate_landmarks(
         const XYZLandmark& rLM1,
         const XYZLandmark& rLM2,
@@ -274,10 +275,6 @@ namespace cpoz
         cv::Point3d cam_to_LM1 = undistort_img_xy_to_xyz(rLM1.img_xy);
         cv::Point3d cam_to_LM2 = undistort_img_xy_to_xyz(rLM2.img_xy);
 
-        // negate to get vectors from landmarks to camera
-        cv::Point3d LM1_to_cam = -cam_to_LM1;
-        cv::Point3d LM2_to_cam = -cam_to_LM2;
-
         // calculate angle C between the "camera to LM1" and "camera to LM2" vectors
         // (cosine is dot product divided by product of magnitudes)
         double mag_cam_to_LM1 = cv::norm(cv::Mat(cam_to_LM1), cv::NORM_L2);
@@ -285,61 +282,80 @@ namespace cpoz
         double cos_C = (cam_to_LM1.dot(cam_to_LM2)) / (mag_cam_to_LM1 * mag_cam_to_LM2);
         rsol.ang_ABC[2] = acos(cos_C);
 
-        // determine vectors between LM1 and LM2
-        // world X order may be flipped from image X order
-        cv::Point3d LM1_to_LM2;
-        cv::Point3d LM2_to_LM1;
-        if (rLM1.world_xyz.x < rLM2.world_xyz.x)
-        {
-            LM1_to_LM2 = rLM2.world_xyz - rLM1.world_xyz;
-            LM2_to_LM1 = rLM1.world_xyz - rLM2.world_xyz;
-        }
-        else
-        {
-            LM1_to_LM2 = rLM1.world_xyz - rLM2.world_xyz;
-            LM2_to_LM1 = rLM2.world_xyz - rLM1.world_xyz;
-        }
-        double mag_LM1_to_LM2 = cv::norm(cv::Mat(LM1_to_LM2), cv::NORM_L2);
+        // determine "triangulation" vectors between LM1 and LM2
+        // LM1-to-LM2 must have +X and LM2-to-LM1 must have -X for triangulation
+        // world X order may be flipped from image X order and require a negation to flip vectors
+        double x_flip_fac = (rLM2.world_xyz.x < rLM1.world_xyz.x) ? -1.0 : 1.0;
+        cv::Point3d triang_LM1_to_LM2 = (rLM2.world_xyz - rLM1.world_xyz) * x_flip_fac;
+        cv::Point3d triang_LM2_to_LM1 = (rLM1.world_xyz - rLM2.world_xyz) * x_flip_fac;
+        double mag_LM1_to_LM2 = cv::norm(cv::Mat(triang_LM1_to_LM2), cv::NORM_L2);
 
         // calculate angle A between vector "LM1 to LM2" and "LM1 to camera"
-        rsol.ang_ABC[0] = acos((LM1_to_cam.dot(LM1_to_LM2)) / (mag_LM1_to_LM2 * mag_cam_to_LM1));
+        rsol.ang_ABC[0] = acos((triang_LM1_to_LM2.dot(-cam_to_LM1)) / (mag_LM1_to_LM2 * mag_cam_to_LM1));
 
-        // calculate angle B between vector "LM1 to LM2" and "LM2 to camera"
-        rsol.ang_ABC[1] = acos((LM2_to_cam.dot(LM2_to_LM1)) / (mag_LM1_to_LM2 * mag_cam_to_LM2));
+        // calculate angle B between vector "LM2 to LM1" and "LM2 to camera"
+        rsol.ang_ABC[1] = acos((triang_LM2_to_LM1.dot(-cam_to_LM2)) / (mag_LM1_to_LM2 * mag_cam_to_LM2));
 
-        // sum of all angles should be 180 degrees, but there will be some numerical error
+        // sum of all angles should be 180 degrees, but there will be some error
         rsol.ang_180_err = (rsol.ang_ABC[0] + rsol.ang_ABC[1] + rsol.ang_ABC[2]) - CV_PI;
 
-        // Law of Sines:  sinA/a = sinB/b = sinC/c
-        // we know length of side c and all three angles so solve for sides b and c
-        double sinC_over_c = sin(rsol.ang_ABC[2]) / mag_LM1_to_LM2;
-        rsol.len_abc[0] = sin(rsol.ang_ABC[0]) / sinC_over_c;
-        rsol.len_abc[1] = sin(rsol.ang_ABC[1]) / sinC_over_c;
-        rsol.len_abc[2] = mag_LM1_to_LM2;
+        // solve the triangle
+        rsol.len_abc = solve_law_of_sines(rsol.ang_ABC, mag_LM1_to_LM2);
 
-        // generate two additional solutions based on the sum-of-all-angles-is-180 error
-        // keep the value of angle C but tweak angles A or B respectively
-        // so that the sum of all angles is 180 degrees
-        rsol.len0_abc = rsol.len_abc;
+        // generate two additional solutions based on sum-of-all-angles-is-180 error
+        // keep value of angle C but tweak angles A or B respectively so sum of all angles is 180
         rsol.ang0_ABC = rsol.ang_ABC;
-        rsol.ang0_ABC[0] = rsol.ang_ABC[0] - rsol.ang_180_err;
-        rsol.len0_abc[0] = sin(rsol.ang0_ABC[0]) / sinC_over_c;
-        rsol.len1_abc = rsol.len_abc;
         rsol.ang1_ABC = rsol.ang_ABC;
+        rsol.ang0_ABC[0] = rsol.ang_ABC[0] - rsol.ang_180_err;
         rsol.ang1_ABC[1] = rsol.ang_ABC[1] - rsol.ang_180_err;
-        rsol.len1_abc[1] = sin(rsol.ang1_ABC[1]) / sinC_over_c;
+        rsol.len0_abc = solve_law_of_sines(rsol.ang0_ABC, mag_LM1_to_LM2);
+        rsol.len1_abc = solve_law_of_sines(rsol.ang1_ABC, mag_LM1_to_LM2);
 
         // solve for ground ranges from camera to landmarks
         // landmarks should always have significant Y offset from the camera
 
         double cam_y_squ = cam_y * cam_y;
-        rsol.gnd_rng_to_LM1[0] = sqrt((rsol.len_abc[0] * rsol.len_abc[0]) - cam_y_squ);
-        rsol.gnd_rng_to_LM1[1] = sqrt((rsol.len0_abc[0] * rsol.len0_abc[0]) - cam_y_squ);
-        rsol.gnd_rng_to_LM1[2] = sqrt((rsol.len1_abc[0] * rsol.len1_abc[0]) - cam_y_squ);
+        rsol.gnd_rng_to_LM1[0] = sqrt((rsol.len_abc[1] * rsol.len_abc[1]) - cam_y_squ);
+        rsol.gnd_rng_to_LM1[1] = sqrt((rsol.len0_abc[1] * rsol.len0_abc[1]) - cam_y_squ);
+        rsol.gnd_rng_to_LM1[2] = sqrt((rsol.len1_abc[1] * rsol.len1_abc[1]) - cam_y_squ);
 
-        rsol.gnd_rng_to_LM2[0] = sqrt((rsol.len_abc[1] * rsol.len_abc[1]) - cam_y_squ);
-        rsol.gnd_rng_to_LM2[1] = sqrt((rsol.len0_abc[1] * rsol.len0_abc[1]) - cam_y_squ);
-        rsol.gnd_rng_to_LM2[2] = sqrt((rsol.len1_abc[1] * rsol.len1_abc[1]) - cam_y_squ);
+        rsol.gnd_rng_to_LM2[0] = sqrt((rsol.len_abc[0] * rsol.len_abc[0]) - cam_y_squ);
+        rsol.gnd_rng_to_LM2[1] = sqrt((rsol.len0_abc[0] * rsol.len0_abc[0]) - cam_y_squ);
+        rsol.gnd_rng_to_LM2[2] = sqrt((rsol.len1_abc[0] * rsol.len1_abc[0]) - cam_y_squ);
+
+        cv::Point3d u_cam_to_LM1 = cam_to_LM1 / mag_cam_to_LM1;
+        cv::Point3d u_cam_to_LM2 = cam_to_LM2 / mag_cam_to_LM2;
+        cv::Point3d fud0 = u_cam_to_LM1 * rsol.len_abc[0];
+        cv::Point3d fud1 = u_cam_to_LM1 * rsol.len_abc[1];
+        cv::Point3d fud2 = u_cam_to_LM2 * rsol.len_abc[0];
+        cv::Point3d fud3 = u_cam_to_LM2 * rsol.len_abc[1];
+        double muh = cv::norm(cv::Mat(fud2 - fud1), cv::NORM_L2); // should be 12
+        // how to fix elevation problem ???
+        std::cout << "muh = " << muh << std::endl;
+        std::cout << "buh = " << sin(rsol.ang_ABC[0]) * rsol.len_abc[1] << std::endl;
+        std::cout << "buh = " << sin(rsol.ang_ABC[1]) * rsol.len_abc[0] << std::endl;
+
+        //// calculate angle formed by vector in X,Z plane from landmark 1 to landmark 2
+        //cv::Point3d world_LM1_to_LM2 = rLM2.world_xyz - rLM1.world_xyz;
+        //world_LM1_to_LM2.y = 0.0;
+        //double landmark_world_ang = atan2(world_LM1_to_LM2.z, world_LM1_to_LM2.x);
+        //rsol.a2 = landmark_world_ang;
+
+        //cam_to_LM1.y = 0.0;
+        //double xzmag_LM1_to_LM2 = cv::norm(cv::Mat(triang_LM1_to_LM2), cv::NORM_L2);
+        //double xzmag_LM1_to_cam = cv::norm(cv::Mat(cam_to_LM1), cv::NORM_L2);
+        //double cos_at_LM1 = triang_LM1_to_LM2.dot(-cam_to_LM1) / (xzmag_LM1_to_cam * xzmag_LM1_to_LM2);
+        //double rel_world_ang = acos(cos_at_LM1);
+        //rsol.a1 = rel_world_ang;
+
+        //// then calculate world angle from A to camera
+        //// use world angle and AC ground range to calulate X,Z offsets
+        //// use offsets to find camera real-world XYZ
+        //double world_ang = landmark_world_ang - rel_world_ang;
+        //rsol.a3 = world_ang;
+        //double world_x = rLM1.world_xyz.x + cos(world_ang) * rsol.gnd_rng_to_LM1[1];
+        //double world_z = rLM1.world_xyz.z + sin(world_ang) * rsol.gnd_rng_to_LM1[1];
+        //rsol.cam_xyz = { world_x, cam_y, world_z };
     }
 
 
@@ -365,7 +381,7 @@ namespace cpoz
         return world_xy1_unrot * rescale;
     }
 
-    void CameraHelper::triangulate_landmarks_old(
+    void CameraHelper::triangulate_landmarks_ideal(
         const XYZLandmark& lmA,
         const XYZLandmark& lmB,
         cv::Point3d& rCamXYZ,
@@ -374,7 +390,7 @@ namespace cpoz
         // let camera be at 0,0 in X,Z plane
         // landmark sightings will be offset by the known camera Y
         rCamXYZ = { 0.0, cam_y, 0.0 };
-        
+
         // find relative ground vector AC from landmark A to camera in X,Z plane
         cv::Point3d xyz_a = calc_cam_to_xyz(lmA.world_xyz.y - cam_y, lmA.img_xy, cam_elev);
         double x_ac = rCamXYZ.x - xyz_a.x;
@@ -393,6 +409,7 @@ namespace cpoz
 
         // determine angle from AC to AB
         double rel_world_ang = acos(cos_ac_ab);
+        std::cout << " rWA " << rel_world_ang * RAD2DEG << std::endl;
 
         // calculate angle that camera is "rotated away from" landmark A
         // if it was pointed directly towards the landmark then the angle would be 0
@@ -403,11 +420,13 @@ namespace cpoz
         double dz = lmB.world_xyz.z - lmA.world_xyz.z;
         double dx = lmB.world_xyz.x - lmA.world_xyz.x;
         double landmark_world_ang = atan2(dz, dx);
+        std::cout << "LMWA " << landmark_world_ang * RAD2DEG << std::endl;
 
         // then calculate world angle from A to camera
         // use world angle and AC ground range to calulate X,Z offsets
         // use offsets to find camera real-world XYZ
         double world_ang = landmark_world_ang - rel_world_ang;
+        std::cout << "  WA " << world_ang * RAD2DEG << std::endl;
         double world_x = lmA.world_xyz.x + cos(world_ang) * mag_ac;
         double world_z = lmA.world_xyz.z + sin(world_ang) * mag_ac;
         rCamXYZ = { world_x, cam_y, world_z };
@@ -416,5 +435,18 @@ namespace cpoz
         cam_azim = rel_cam_azim - world_ang;
         if (cam_azim < 0.0) cam_azim += (CV_PI * 2.0);
         if (cam_azim >= (CV_PI * 2.0)) cam_azim -= (CV_PI * 2.0);
+    }
+
+
+    cv::Vec3d CameraHelper::solve_law_of_sines(const cv::Vec3d& rAngABC, const double c)
+    {
+        // Law of Sines:  sinA/a = sinB/b = sinC/c
+        // we know length of side c and all three angles so solve for sides a and b
+        cv::Vec3d result;
+        double sinC_over_c = sin(rAngABC[2]) / c;
+        result[0] = sin(rAngABC[0]) / sinC_over_c;  // side a (opposite of LM1, cam to LM2)
+        result[1] = sin(rAngABC[1]) / sinC_over_c;  // side b (opposite of LM2, cam to LM1)
+        result[2] = c;
+        return result;
     }
 }

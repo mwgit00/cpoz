@@ -76,6 +76,10 @@ namespace cpoz
             cv::Vec3d len1_abc;
             cv::Vec3d gnd_rng_to_LM1;
             cv::Vec3d gnd_rng_to_LM2;
+            cv::Point3d cam_xyz;
+            double a1;
+            double a2;
+            double a3;
         } T_TRIANG_SOL;
 
         CameraHelper();
@@ -117,16 +121,21 @@ namespace cpoz
             const cv::Point2d& rImgXY,
             const double cam_elev_rad);
 
-        // Use known Y of landmarks A and B and their image coordinates to perform triangulation.
+        // Use known XYZ of two landmarks and their image coordinates to perform triangulation.
+        // This method is good for testing with ideal inputs but no so great in practice.
         // param: lmA Landmark A info
         // param: lmB Landmark B info
         // param: cam_azim azimuth angle of camera in world
         // param: rCamXYZ position of camera in world
-        void triangulate_landmarks_old(
+        void triangulate_landmarks_ideal(
             const XYZLandmark& lmA,
             const XYZLandmark& lmB,
             cv::Point3d& rCamXYZ,
             double& cam_azim);
+
+    private:
+
+        static cv::Vec3d solve_law_of_sines(const cv::Vec3d& rAngABC, const double c);
 
     public:
 

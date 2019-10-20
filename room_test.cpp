@@ -35,18 +35,17 @@ static cpoz::CameraHelper cam;
 void foo()
 {
     // X,Z and azim are unknowns that must be solved
-    cv::Point3d cam_xyz({ -12, -48, 120 });
-    double azim = 170 * cpoz::DEG2RAD; // use 180
+    cv::Point3d cam_xyz({ 24, -48, 120 });
+    double azim = 210 * cpoz::DEG2RAD; // use 180
 #if 0
     double elev = atan(-cam_xyz.y / cam_xyz.z);
 #else
-    double elev = 10 * cpoz::DEG2RAD;
+    double elev = 35 * cpoz::DEG2RAD;
 #endif
 
-    //cpoz::XYZLandmark lm1({ 6, -96, 0 });
-    //cpoz::XYZLandmark lm2({ -6, -84, 0 });
-    cpoz::XYZLandmark lm1({ 6, -96, 0 });
-    cpoz::XYZLandmark lm2({ -6, -96, 0 });
+    // landmarks ALWAYS have same Y and are above camera
+    cpoz::XYZLandmark lm1({ 0, -96, 0 });
+    cpoz::XYZLandmark lm2({ -12, -96, 0 });
 
     // determine pixel location of LM 1
     cv::Point3d xyz1 = lm1.world_xyz - cam_xyz;
@@ -72,27 +71,31 @@ void foo()
 
     // guesses
     cpoz::CameraHelper cam;
-    double pos_elev = 10 * cpoz::DEG2RAD;
+    double pos_elev = elev;// 10 * cpoz::DEG2RAD;
     cam.cam_elev = pos_elev;
-    cam.cam_y = -48;
+    cam.cam_y = cam_xyz.y;// -48;
 
     cpoz::CameraHelper::T_TRIANG_SOL sol;
     cam.triangulate_landmarks(lm1, lm2, sol);
 
     std::cout << (sol.ang_180_err) * cpoz::RAD2DEG << std::endl;
-    std::cout << sol.ang_ABC * cpoz::RAD2DEG << std::endl;
+    std::cout << sol.ang_ABC * cpoz::RAD2DEG << ", ";
     std::cout << sol.len_abc << std::endl;
-    std::cout << sol.ang0_ABC * cpoz::RAD2DEG << std::endl;
+    std::cout << sol.ang0_ABC * cpoz::RAD2DEG << ", ";
     std::cout << sol.len0_abc << std::endl;
-    std::cout << sol.ang1_ABC * cpoz::RAD2DEG << std::endl;
+    std::cout << sol.ang1_ABC * cpoz::RAD2DEG << ", ";
     std::cout << sol.len1_abc << std::endl;
 
     std::cout << sol.gnd_rng_to_LM1 << std::endl;
     std::cout << sol.gnd_rng_to_LM2 << std::endl;
+    std::cout << sol.a1 * cpoz::RAD2DEG << std::endl;
+    std::cout << sol.a2 * cpoz::RAD2DEG << std::endl;
+    std::cout << sol.a3 * cpoz::RAD2DEG << std::endl;
+    std::cout << sol.cam_xyz << std::endl;
 
     cv::Point3d pos_xyz;
     double pos_azim;
-    cam.triangulate_landmarks_old(lm1, lm2, pos_xyz, pos_azim);
+    cam.triangulate_landmarks_ideal(lm1, lm2, pos_xyz, pos_azim);
     std::cout << "Robot is at: [" << pos_xyz.x << ", " << pos_xyz.z << "] @ " << pos_azim * cpoz::RAD2DEG << std::endl;
 
     cv::Point2d foopt;
@@ -157,11 +160,11 @@ bool landmark_test(
     // landmark with smallest img X is always first parameter
     if (img_xy1.x < img_xy2.x)
     {
-        cam.triangulate_landmarks_old(lm1, lm2, pos_xyz, world_azim);
+        cam.triangulate_landmarks_ideal(lm1, lm2, pos_xyz, world_azim);
     }
     else
     {
-        cam.triangulate_landmarks_old(lm2, lm1, pos_xyz, world_azim);
+        cam.triangulate_landmarks_ideal(lm2, lm1, pos_xyz, world_azim);
     }
 
     std::cout << "Robot is at: [" << pos_xyz.x << ", " << pos_xyz.z << "] @ " << world_azim * cpoz::RAD2DEG << std::endl;
