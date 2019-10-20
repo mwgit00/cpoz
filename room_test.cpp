@@ -32,28 +32,29 @@ static int pass_ct = 0;
 static int test_ct = 0;
 static cpoz::CameraHelper cam;
 
-void foo()
+
+
+bool assign_landmarks(
+    cpoz::XYZLandmark& rLM1,
+    cpoz::XYZLandmark& rLM2,
+    const cv::Point3d& rCamXYZ,
+    const double azim,
+    const double elev)
 {
-    // X,Z and azim are unknowns that must be solved
-    cv::Point3d cam_xyz({ 24, -48, 120 });
-    double azim = 210 * cpoz::DEG2RAD; // use 180
-#if 0
-    double elev = atan(-cam_xyz.y / cam_xyz.z);
-#else
-    double elev = 35 * cpoz::DEG2RAD;
-#endif
+    bool result = true;
 
-    // landmarks ALWAYS have same Y and are above camera
-    cpoz::XYZLandmark lm1({ 0, -96, 0 });
-    cpoz::XYZLandmark lm2({ -12, -96, 0 });
-
+    // for the two landmarks:
+    // - translate landmark by camera offset
+    // - rotate by azimuth and elevation
+    // - project into image
+    
     // determine pixel location of LM 1
-    cv::Point3d xyz1 = lm1.world_xyz - cam_xyz;
+    cv::Point3d xyz1 = rLM1.world_xyz - rCamXYZ;
     cv::Point3d xyz1_rot = cam.calc_xyz_after_rotation(xyz1, elev, azim, 0);
     cv::Point2d img_xy1 = cam.project_xyz_to_img_xy(xyz1_rot);
 
     // determine pixel location of LM 2
-    cv::Point3d xyz2 = lm2.world_xyz - cam_xyz;
+    cv::Point3d xyz2 = rLM2.world_xyz - rCamXYZ;
     cv::Point3d xyz2_rot = cam.calc_xyz_after_rotation(xyz2, elev, azim, 0);
     cv::Point2d img_xy2 = cam.project_xyz_to_img_xy(xyz2_rot);
 
@@ -64,10 +65,33 @@ void foo()
     if (cam.is_visible(img_xy1) && cam.is_visible(img_xy2))
     {
         std::cout << "Both landmarks are visible.  ";
+        rLM1.set_img_xy(img_xy1);
+        rLM2.set_img_xy(img_xy2);
+    }
+    else
+    {
+        std::cout << "********** At least one landmark is NOT visible!!!" << std::endl;
+        result = false;
     }
 
-    lm1.set_img_xy(img_xy1);
-    lm2.set_img_xy(img_xy2);
+    // update landmark image coords
+    return result;
+}
+
+
+
+void foo()
+{
+    // X,Z and azim are unknowns that must be solved
+    cv::Point3d cam_xyz({ 24, -48, 120 });
+    double azim = 210 * cpoz::DEG2RAD;
+    double elev = 29 * cpoz::DEG2RAD;
+
+    // let landmarks ALWAYS have same Y and be above camera
+    cpoz::XYZLandmark lm1({ -12, -96, 0 });
+    cpoz::XYZLandmark lm2({ 0, -96, 0 });
+
+    (void) assign_landmarks(lm1, lm2, cam_xyz, azim, elev);
 
     // guesses
     cpoz::CameraHelper cam;
@@ -76,7 +100,14 @@ void foo()
     cam.cam_y = cam_xyz.y;// -48;
 
     cpoz::CameraHelper::T_TRIANG_SOL sol;
-    cam.triangulate_landmarks(lm1, lm2, sol);
+    if (lm1.img_xy.x < lm2.img_xy.x)
+    {
+        cam.triangulate_landmarks(lm1, lm2, sol);
+    }
+    else
+    {
+        cam.triangulate_landmarks(lm2, lm1, sol);
+    }
 
     std::cout << (sol.ang_180_err) * cpoz::RAD2DEG << std::endl;
     std::cout << sol.ang_ABC * cpoz::RAD2DEG << ", ";
@@ -113,52 +144,17 @@ bool landmark_test(
     double& world_azim)
 {
     test_ct++;
-    
-    // for the two landmarks:
-    // - translate landmark by camera offset
-    // - rotate by azimuth and elevation
-    // - project into image
-    
-    double azim = cam_angs_rad[0];
-    double elev = cam_angs_rad[1];
-    
-    // determine pixel location of LM 1
-    cv::Point3d xyz1 = lm1.world_xyz - cam_xyz;
-    cv::Point3d xyz1_rot = cam.calc_xyz_after_rotation(xyz1, elev, azim, 0);
-    cv::Point2d img_xy1 = cam.project_xyz_to_img_xy(xyz1_rot);
-
-    // determine pixel location of LM 2
-    cv::Point3d xyz2 = lm2.world_xyz - cam_xyz;
-    cv::Point3d xyz2_rot = cam.calc_xyz_after_rotation(xyz2, elev, azim, 0);
-    cv::Point2d img_xy2 = cam.project_xyz_to_img_xy(xyz2_rot);
-
-    // dump the image X,Y points and perform visibility check
-    std::cout << std::endl;
-    std::cout << "Image Landmark 1:  " << img_xy1 << std::endl;
-    std::cout << "Image Landmark 2:  " << img_xy2 << std::endl;
-    if (cam.is_visible(img_xy1) && cam.is_visible(img_xy2))
+    if (!assign_landmarks(lm1, lm2, cam_xyz, cam_angs_rad[0], cam_angs_rad[1]))
     {
-        std::cout << "Both landmarks are visible.  ";
-    }
-    else
-    {
-        std::cout << "********** At least one landmark is NOT visible!!!" << std::endl;
         return false;
     }
     
-    // all is well so proceed with test...
-
-    // landmarks have been acquired
-    // camera elevation and world Y also need updating
-    cam.cam_elev = elev;
+    // all is well so assign camera elev and known Y
+    cam.cam_elev = cam_angs_rad[1];
     cam.cam_y = cam_xyz.y;
 
-    // update landmark image coords
-    lm1.set_img_xy(img_xy1);
-    lm2.set_img_xy(img_xy2);
-
     // landmark with smallest img X is always first parameter
-    if (img_xy1.x < img_xy2.x)
+    if (lm1.img_xy.x < lm2.img_xy.x)
     {
         cam.triangulate_landmarks_ideal(lm1, lm2, pos_xyz, world_azim);
     }

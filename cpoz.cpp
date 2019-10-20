@@ -371,8 +371,8 @@ void loop_cal(void)
 int main()
 {
     std::cout << stitle << std::endl;
-    foo();
-    return 0;
+    //foo();
+    //return 0;
     //cpoz::CameraHelper cam;
     //cam.cal(".\\calib");
     test_room1();
