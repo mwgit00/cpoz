@@ -273,19 +273,45 @@ namespace cpoz
     {
         // LM1 is left landmark in image and LM2 is right landmark in image
         // determine vectors from camera to left and right landmarks based on image coordinates
-        cv::Point3d cam_to_L = undistort_img_xy_to_xyz(rLM1.img_xy);
-        cv::Point3d cam_to_R = undistort_img_xy_to_xyz(rLM2.img_xy);
+        cv::Point3d cam_to_1 = undistort_img_xy_to_xyz(rLM1.img_xy);
+        cv::Point3d cam_to_2 = undistort_img_xy_to_xyz(rLM2.img_xy);
 
         // calculate angle C between the left and right landmark vectors
         // (cosine is dot product divided by product of magnitudes)
-        double mag_cam_to_L = cv::norm(cv::Mat(cam_to_L), cv::NORM_L2);
-        double mag_cam_to_R = cv::norm(cv::Mat(cam_to_R), cv::NORM_L2);;
-        double cos_C = (cam_to_L.dot(cam_to_R)) / (mag_cam_to_L * mag_cam_to_R);
+        double mag_cam_to_1 = cv::norm(cv::Mat(cam_to_1), cv::NORM_L2);
+        double mag_cam_to_2 = cv::norm(cv::Mat(cam_to_2), cv::NORM_L2);
+        double cos_C = cam_to_1.dot(cam_to_2) / (mag_cam_to_1 * mag_cam_to_2);
         rsol.ang_ABC[2] = acos(cos_C);
+
+        cv::Point3d v_dn = { 0, 1, 0 };
+        cv::Point3d v_up = { 0, -1, 0 };
+        rsol.ang_ABC[0] = acos(v_up.dot(-cam_to_1) / (mag_cam_to_1));
+        rsol.ang_ABC[1] = acos(v_dn.dot(-cam_to_2) / (mag_cam_to_2));
+
+        rsol.ang_180_err = rsol.ang_ABC[0] + rsol.ang_ABC[1] + rsol.ang_ABC[2] - CV_PI;
+
+        rsol.len_abc = solve_law_of_sines(rsol.ang_ABC, 12);
+
+        //double f0 = 1;// cam_to_L.y;
+        //cv::Point3d fpt0 = cam_to_L * (-10 / f0);
+        //double f1 = 1;// cam_to_R.y;
+        //cv::Point3d fpt1 = cam_to_R * (-10 / f1);
+        //cv::Point3d fud = fpt0 - fpt1;
+        //double q = cv::norm(cv::Mat(fud), cv::NORM_L2);
+        //double fudge = 12 / q;
+
+        //fpt0 = fpt0 * fudge;
+        //fpt1 = fpt1 * fudge;
+        //fud = fpt0 - fpt1;
+        //q = cv::norm(cv::Mat(fud), cv::NORM_L2);
+
+        //double aaa = cv::norm(cv::Mat(fpt0), cv::NORM_L2);
+        //double bbb = cv::norm(cv::Mat(fpt1), cv::NORM_L2);
 
         // and we are stuck...
 
         // ???
+        rsol.a1 = 0;
     }
 
 

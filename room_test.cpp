@@ -84,14 +84,28 @@ void foo()
 {
     // X,Z and azim are unknowns that must be solved
     cv::Point3d cam_xyz({ 24, -48, 120 });
-    double azim = 210 * cpoz::DEG2RAD;
-    double elev = 29 * cpoz::DEG2RAD;
+    double azim = 220 * cpoz::DEG2RAD;
+    double elev = 20 * cpoz::DEG2RAD;
+    //double elev = atan(48.0 / 120.0);// *cpoz::DEG2RAD;
 
     // let landmarks ALWAYS have same Y and be above camera
-    cpoz::XYZLandmark lm1({ -12, -96, 0 });
+    cpoz::XYZLandmark lm1({ 0, -84, 0 });
     cpoz::XYZLandmark lm2({ 0, -96, 0 });
 
     (void) assign_landmarks(lm1, lm2, cam_xyz, azim, elev);
+
+    //double a1 = sqrt(24 * 24 + 120 * 120 + 48 * 48);
+    //double a2 = sqrt(36 * 36 + 120 * 120 + 48 * 48);
+    //double aa1 = sqrt(24 * 24 + 120 * 120);
+    //double aa2 = sqrt(36 * 36 + 120 * 120);
+    //double cos_C = ((a1 * a1) + (a2 * a2) - (12 * 12)) / (2 * a1 * a2);
+    //double ang_C = acos(cos_C) * cpoz::RAD2DEG;
+    double a1 = sqrt(24 * 24 + 120 * 120 + 48 * 48);
+    double a2 = sqrt(24 * 24 + 120 * 120 + 36 * 36);
+    double aa1 = sqrt(24 * 24 + 120 * 120);
+    double aa2 = sqrt(24 * 24 + 120 * 120);
+    double cos_C = ((a1 * a1) + (a2 * a2) - (12 * 12)) / (2 * a1 * a2);
+    double ang_C = acos(cos_C) * cpoz::RAD2DEG;
 
     // guesses
     cpoz::CameraHelper cam;
