@@ -49,6 +49,7 @@ using namespace cv;
 #define SCA_GREEN   (cv::Scalar(0,255,0))
 #define SCA_YELLOW  (cv::Scalar(0,255,255))
 #define SCA_BLUE    (cv::Scalar(255,0,0))
+#define SCA_WHITE   (cv::Scalar(255,255,255))
 
 
 static bool is_rec_enabled = false;
@@ -73,8 +74,8 @@ void test_room1()
         room_test(room1::landmark_maps, room1::lm_vis_1_1, world_xyz, "mark1", "mark2");
         
         room_test(room1::landmark_maps, room1::lm_vis_1_1, world_xyz, "mark1", "mark3");
-        room_test(room1::landmark_maps, room1::lm_vis_1_1, world_xyz, "mark1", "mark2", 10.0);
-        room_test(room1::landmark_maps, room1::lm_vis_1_1, world_xyz, "mark1", "mark3", 10.0);
+        room_test(room1::landmark_maps, room1::lm_vis_1_1, world_xyz, "mark1", "mark2", "", 10.0);
+        room_test(room1::landmark_maps, room1::lm_vis_1_1, world_xyz, "mark1", "mark3", "", 10.0);
     }
 
     {
@@ -106,16 +107,16 @@ void test_room2()
         // LM name mapped to [world_azim, elev] for visibility at world (5, 8)
         // but convert to inches to test scaling
         cv::Point3d world_xyz = { 60.0, -24.0, 96.0 };
-        room_test(room2::landmark_maps, room2::lm_vis_5_8, world_xyz, "mark1", "mark2");
-        room_test(room2::landmark_maps, room2::lm_vis_5_8, world_xyz, "mark1", "mark2", 10.0);
+        room_test(room2::landmark_maps, room2::lm_vis_5_8, world_xyz, "mark1", "mark2", "markv");
+        room_test(room2::landmark_maps, room2::lm_vis_5_8, world_xyz, "mark1", "mark2", "markv", 10.0);
     }
 
     {
         // LM name mapped to [world_azim, elev] for visibility at world (1, 8)
         // but convert to inches to test scaling
         cv::Point3d world_xyz = { 12.0, -24.0, 96.0 };
-        room_test(room2::landmark_maps, room2::lm_vis_1_8, world_xyz, "mark1", "mark2");
-        room_test(room2::landmark_maps, room2::lm_vis_1_8, world_xyz, "mark1", "mark2", 10.0);
+        room_test(room2::landmark_maps, room2::lm_vis_1_8, world_xyz, "mark1", "mark2", "markv");
+        room_test(room2::landmark_maps, room2::lm_vis_1_8, world_xyz, "mark1", "mark2", "markv", 10.0);
     }
 
     show_tally();
@@ -175,7 +176,6 @@ void loop_cal(void)
 {
     const int max_good_ct = 20;
 
-    cv::FileStorage cvfs;
     std::vector<std::vector<cv::Vec2f>> vvcal;
     std::vector<std::string> vcalfiles;
     std::set<int> cal_label_set;
@@ -213,8 +213,6 @@ void loop_cal(void)
     vcap >> img_viewer;
     capture_size = img_viewer.size();
 
-    cvfs.open("cal_meta.yaml", cv::FileStorage::WRITE);
-
     // and the image processing loop is running...
     bool is_running = true;
 
@@ -236,18 +234,36 @@ void loop_cal(void)
 
         if (true)
         {
-            // draw circles around all BGR landmarks and put labels by each one
-            // unless about to snap a calibration image which can't have the circles
-            cal_label_set.clear();
+            // sort landmark info by label code
+            // and check for proper quantity and uniqueness
+            std::sort(qinfo.begin(), qinfo.end(), cpoz::BGRLandmark::compare_by_code);
             for (const auto& r : qinfo)
             {
                 cal_label_set.insert(r.code);
-                if ((cal_good_ct < (max_good_ct - 3)) || (cal_good_ct >= max_good_ct))
+            }
+            bool is_good_grid = ((qinfo.size() == 12) && (cal_label_set.size() == 12));
+
+            // draw circles around all BGR landmarks and put labels by each one
+            // unless about to snap a calibration image which can't have the circles
+            if ((cal_good_ct < (max_good_ct - 3)) || (cal_good_ct >= max_good_ct))
+            {
+                if (is_good_grid)
                 {
-                    char x[2] = { 0 };
-                    x[0] = static_cast<char>(r.code) + 'A';
-                    circle(img_viewer, r.ctr, 7, (r.diff > 0.0) ? SCA_RED : SCA_BLUE, 3);
-                    putText(img_viewer, std::string(x), r.ctr, FONT_HERSHEY_PLAIN, 2.0, SCA_GREEN, 2);
+                    cv::Point prev(0, 0);
+                    for (const auto& r : qinfo)
+                    {
+                        cv::Point pt(r.ctr);
+                        if (prev != cv::Point(0,0))
+                        {
+                            cv::line(img_viewer, prev, pt, SCA_YELLOW, 1);
+                        }
+                        prev = pt;
+
+                        char x[2] = { 0 };
+                        x[0] = static_cast<char>(r.code) + 'A';
+                        circle(img_viewer, r.ctr, 7, (r.diff > 0.0) ? SCA_RED : SCA_BLUE, 3);
+                        putText(img_viewer, std::string(x), r.ctr, FONT_HERSHEY_PLAIN, 2.0, SCA_GREEN, 2);
+                    }
                 }
             }
 
@@ -286,7 +302,7 @@ void loop_cal(void)
             // then user must "hide" some landmarks to trigger another grab
             if (is_cal_enabled)
             {
-                if (cal_label_set.size() == 12)
+                if (is_good_grid)
                 {
                     if (cal_good_ct < max_good_ct)
                     {
@@ -295,15 +311,14 @@ void loop_cal(void)
                         {
                             // save snapshot of image
                             std::ostringstream osx;
-                            osx << CALIB_PATH << "img_" << std::setfill('0') << std::setw(5) << cal_ct << ".png";
+                            osx << "img_" << std::setfill('0') << std::setw(5) << cal_ct << ".png";
                             std::string sfile = osx.str();
-                            imwrite(sfile, img_viewer);
+                            imwrite(CALIB_PATH + sfile, img_viewer);
                             vcalfiles.push_back(sfile);
                             std::cout << "CALIB. SNAP " << sfile << std::endl;
-
-                            // sort image points by label code
+                            
+                            // image points have already been sorted
                             std::vector<cv::Vec2f> vimgpts;
-                            std::sort(qinfo.begin(), qinfo.end(), cpoz::BGRLandmark::compare_by_code);
                             for (const auto& r : qinfo)
                             {
                                 vimgpts.push_back(cv::Vec2f(
@@ -357,6 +372,9 @@ void loop_cal(void)
                 vgridpts.push_back(cv::Point3f(float(j * grid_square), float(i * grid_square), 0));
             }
         }
+        cv::FileStorage cvfs;
+        std::string scvfs = std::string(CALIB_PATH) + std::string("cal_meta.yaml");
+        cvfs.open(scvfs, cv::FileStorage::WRITE);
         cvfs << "image_size" << capture_size;
         cvfs << "grid_size" << board_size;
         cvfs << "grid_square" << grid_square;
@@ -371,11 +389,11 @@ void loop_cal(void)
 int main()
 {
     std::cout << stitle << std::endl;
-    foo();
-    return 0;
+    //foo();
+    //return 0;
     //cpoz::CameraHelper cam;
     //cam.cal(".\\calib");
     //test_room1();
-    //test_room2();
+    test_room2();
     //loop_cal();
 }

@@ -58,16 +58,24 @@ namespace room2
     {"C", {120.0, y, 192.0}},
     {"D", {120.0, y, 0.0}} };
 
-    // companion landmarks
+    // horizontal companion landmarks
     tMapStrToXYZ mark2 =
-    { {"A", {24.0, y, 0.0}},
-    {"B", {24.0, y, 192.0}},
-    {"C", {96.0, y, 192.0}},
-    {"D", {96.0, y, 0.0}} };
+    { {"A", {12.0, y, 0.0}},
+    {"B", {12.0, y, 192.0}},
+    {"C", {108.0, y, 192.0}},
+    {"D", {108.0, y, 0.0}} };
+
+    // vertical companion landmarks
+    tMapStrToXYZ markv =
+    { {"A", {0.0, y + 12.0, 0.0}},
+    {"B", {0.0, y + 12.0, 192.0}},
+    {"C", {120.0, y + 12.0, 192.0}},
+    {"D", {120.0, y + 12.0, 0.0}} };
 
     tMapStrToMapStrToXYZ landmark_maps =
     { {"mark1", mark1},
-    {"mark2", mark2} };
+    {"mark2", mark2},
+    {"markv", markv}};
 
     // azimuth and elevation of camera so that landmarks are visible from (5, 8)
     tMapStrToAZEL lm_vis_5_8 =

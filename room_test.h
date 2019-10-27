@@ -55,6 +55,7 @@ void room_test(
     const cv::Point3d& known_cam_xyz,
     const std::string& lm_map_name_A,
     const std::string& lm_map_name_B,
+    const std::string& lm_map_name_C = "",
     const double elev_offset = 0.0);
 
 void reset_counts();

@@ -88,7 +88,13 @@ namespace cpoz
         static void cal(const std::string& rs);
 
         static cv::Mat calc_axes_rotation_mat(const double roll, const double pitch, const double yaw);
-        static cv::Point3d calc_xyz_after_rotation(const cv::Point3d& xyz_pos, const double roll, const double pitch, const double yaw);
+        
+        static cv::Point3d calc_xyz_after_rotation(
+            const cv::Point3d& xyz_pos,
+            const double roll,
+            const double pitch,
+            const double yaw,
+            const bool is_inverse = false);
 
         // load calibration data
         bool load(const std::string& rscal);
@@ -108,7 +114,7 @@ namespace cpoz
         // param: rLM1 Landmark 1 info
         // param: rLM2 Landmark 2 info
         // param: rsol Solution
-        void CameraHelper::triangulate_landmarks(
+        void triangulate_landmarks(
             const XYZLandmark& rLM1,
             const XYZLandmark& rLM2,
             T_TRIANG_SOL& rsol) const;
@@ -119,7 +125,8 @@ namespace cpoz
         cv::Point3d calc_cam_to_xyz(
             const double known_Y,
             const cv::Point2d& rImgXY,
-            const double cam_elev_rad);
+            const double cam_elev_rad,
+            const double cam_azim_rad = 0.0);
 
         // Use known XYZ of two landmarks and their image coordinates to perform triangulation.
         // This method is good for testing with ideal inputs but no so great in practice.

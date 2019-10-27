@@ -153,17 +153,24 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>C:\opencv-4.1.0\opencv\build\x64\vc15\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>opencv_world410.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="BGRLandmark.cpp" />
     <ClCompile Include="cpoz.cpp" />
     <ClCompile Include="room1.cpp" />
     <ClCompile Include="CameraHelper.cpp" />
+    <ClCompile Include="room2.cpp" />
+    <ClCompile Include="room_test.cpp" />
     <ClCompile Include="XYZLandmark.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="BGRLandmark.h" />
     <ClInclude Include="CameraHelper.h" />
     <ClInclude Include="room1.h" />
+    <ClInclude Include="room2.h" />
+    <ClInclude Include="room_test.h" />
     <ClInclude Include="XYZLandmark.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

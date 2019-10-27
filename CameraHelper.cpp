@@ -58,9 +58,9 @@ namespace cpoz
 
     void CameraHelper::cal(const std::string& rs)
     {
-        std::string spath = rs + "\\cal_meta.yaml";
+        std::string smeta = rs + "\\cal_meta.yaml";
         cv::FileStorage fsin;
-        fsin.open(spath, cv::FileStorage::READ);
+        fsin.open(smeta, cv::FileStorage::READ);
         if (fsin.isOpened())
         {
             cv::Size img_sz;
@@ -86,7 +86,7 @@ namespace cpoz
             // so get sub-pixel corner locations
             for (size_t i = 0; i < vcalfiles.size(); i++)
             {
-                std::string sfile = vcalfiles[i];
+                std::string sfile = rs + "\\" + vcalfiles[i];
                 cv::Mat img = cv::imread(sfile.c_str(), cv::IMREAD_GRAYSCALE);
                 std::vector<cv::Point2f>& rv = vvcalpts[i];
                 cv::cornerSubPix(img, rv, { 5,5 }, { -1,-1 }, tc_corners);
@@ -142,7 +142,7 @@ namespace cpoz
 #endif
                 std::cout << "Calibration successful!!!" << std::endl;
                 cv::FileStorage fsout;
-                fsout.open("foo.yaml", cv::FileStorage::WRITE);
+                fsout.open(rs + "\\cal_final.yaml", cv::FileStorage::WRITE);
                 if (fsout.isOpened())
                 {
                     fsout << "image_size" << img_sz;
@@ -200,12 +200,21 @@ namespace cpoz
     }
 
 
-    cv::Point3d CameraHelper::calc_xyz_after_rotation(const cv::Point3d& xyz_pos, const double roll, const double pitch, const double yaw)
+    cv::Point3d CameraHelper::calc_xyz_after_rotation(
+        const cv::Point3d& xyz_pos,
+        const double roll,
+        const double pitch,
+        const double yaw,
+        const bool is_inverse)
     {
         // Rotates axes by roll, pitch, yaw angles
         // and returns new position with respect to rotated axes.
         // Rotate along X, Y, Z in that order to visualize.
         cv::Mat ro_mat = calc_axes_rotation_mat(roll, pitch, yaw);
+        if (is_inverse)
+        {
+            ro_mat = ro_mat.t();
+        }
         cv::Mat r = ro_mat * cv::Mat(xyz_pos);
         return cv::Point3d(r.at<double>(0, 0), r.at<double>(1, 0), r.at<double>(2, 0));
     }
@@ -283,30 +292,36 @@ namespace cpoz
         double cos_C = cam_to_1.dot(cam_to_2) / (mag_cam_to_1 * mag_cam_to_2);
         rsol.ang_ABC[2] = acos(cos_C);
 
-        cv::Point3d v_dn = { 0, 1, 0 };
-        cv::Point3d v_up = { 0, -1, 0 };
-        rsol.ang_ABC[0] = acos(v_up.dot(-cam_to_1) / (mag_cam_to_1));
-        rsol.ang_ABC[1] = acos(v_dn.dot(-cam_to_2) / (mag_cam_to_2));
+        cv::Point3d v_1_to_2 = cam_to_2 - cam_to_1;
+        cv::Point3d v_2_to_1 = cam_to_1 - cam_to_2;
+        double mag_v_1_to_2 = cv::norm(cv::Mat(v_1_to_2), cv::NORM_L2);
+        double mag_v_2_to_1 = cv::norm(cv::Mat(v_2_to_1), cv::NORM_L2);
+        rsol.ang_ABC[0] = acos(v_1_to_2.dot(-cam_to_1) / (mag_cam_to_1 * mag_v_1_to_2));
+        rsol.ang_ABC[1] = acos(v_2_to_1.dot(-cam_to_2) / (mag_cam_to_2 * mag_v_2_to_1));
 
-        rsol.ang_180_err = rsol.ang_ABC[0] + rsol.ang_ABC[1] + rsol.ang_ABC[2] - CV_PI;
+        int i = 0;
+        cv::Point2d boo = rLM1.img_xy;
+        cv::Point3d woo = { 0, 0, 131.453 };
+        double azim_0 = atan((rLM1.img_xy.x - cx) / fx);
+        double elev_0 = 5 * cpoz::DEG2RAD;
+        while (i++ < 1000)
+        {
+            std::cout << azim_0 * cpoz::RAD2DEG << ", " << elev_0 * cpoz::RAD2DEG << std::endl;
 
-        rsol.len_abc = solve_law_of_sines(rsol.ang_ABC, 12);
+            cv::Point3d fud0 = calc_xyz_after_rotation(woo, elev_0, azim_0, 0, true);
 
-        //double f0 = 1;// cam_to_L.y;
-        //cv::Point3d fpt0 = cam_to_L * (-10 / f0);
-        //double f1 = 1;// cam_to_R.y;
-        //cv::Point3d fpt1 = cam_to_R * (-10 / f1);
-        //cv::Point3d fud = fpt0 - fpt1;
-        //double q = cv::norm(cv::Mat(fud), cv::NORM_L2);
-        //double fudge = 12 / q;
+            cv::Point2d fud2 = project_xyz_to_img_xy(fud0);
+            boo = fud2;
 
-        //fpt0 = fpt0 * fudge;
-        //fpt1 = fpt1 * fudge;
-        //fud = fpt0 - fpt1;
-        //q = cv::norm(cv::Mat(fud), cv::NORM_L2);
+            double qx = boo.x - rLM1.img_xy.x;
+            double qy = boo.y - rLM1.img_xy.y;
+            azim_0 += atan(qx / fx);
+            elev_0 += atan(qy / fy);
 
-        //double aaa = cv::norm(cv::Mat(fpt0), cv::NORM_L2);
-        //double bbb = cv::norm(cv::Mat(fpt1), cv::NORM_L2);
+            rsol.ang_180_err = rsol.ang_ABC[0] + rsol.ang_ABC[1] + rsol.ang_ABC[2] - CV_PI;
+            rsol.len_abc = solve_law_of_sines(rsol.ang_ABC, 12);
+
+        }
 
         // and we are stuck...
 
@@ -319,7 +334,8 @@ namespace cpoz
     cv::Point3d CameraHelper::calc_cam_to_xyz(
         const double known_Y,
         const cv::Point2d& rImgXY,
-        const double cam_elev_rad)
+        const double cam_elev_rad,
+        const double cam_azim_rad)
     {
         // use camera params to convert (X,Y) to normalized world coordinates (X,Y,1)
         std::vector<cv::Point2d> input_xy(1, rImgXY);
@@ -328,7 +344,7 @@ namespace cpoz
         cv::Point3d world_xy1 = { output_xy[0].x, output_xy[0].y, 1.0 };
 
         // rotate to undo known camera elevation
-        cv::Point3d world_xy1_unrot = calc_xyz_after_rotation(world_xy1, -cam_elev_rad, 0.0, 0.0);
+        cv::Point3d world_xy1_unrot = calc_xyz_after_rotation(world_xy1, -cam_elev_rad, -cam_azim_rad, 0.0);
 
         // scale normalized world coordinates based on known height Y
         // this has X,Y,Z relative to camera body
