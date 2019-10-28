@@ -71,125 +71,84 @@ bool assign_landmarks(
 void foo()
 {
     // X,Z and azim are unknowns that must be solved
-//    cv::Point3d cam_xyz({ 24, -48, 120 });
-    cv::Point3d cam_xyz({ 24, -48, -120 });
-
-    double r = sqrt(24 * 24 + 120 * 120);
-    double raz = -(atan2(-120, -24) - (CV_PI / 2)) * cpoz::RAD2DEG;
-    double rel = atan(48.0 / r) * cpoz::RAD2DEG;
-    double azim = 0 * cpoz::DEG2RAD;
-    double elev = 5 * cpoz::DEG2RAD;
+    // elevation is known to within a few degrees
+    cv::Point3d cam_xyz = { 12.0, -96.0, 96.0 };
+    double azim = 175 * cpoz::DEG2RAD;
+    double azim_f = -5 * cpoz::DEG2RAD;
+    double elev = -5 * cpoz::DEG2RAD;
 
     // let landmarks ALWAYS have same Y and be above camera ???
-    cpoz::XYZLandmark lm0({ 12, -96, 0 });
-    cpoz::XYZLandmark lm1({ 0, -96, 0 });
-    cpoz::XYZLandmark lm2({ 0, -84, 0 });
-    cpoz::XYZLandmark lm3({ 12, -84, 0 });
-    //cpoz::XYZLandmark lm0({ 6, 6, 0 });
-    //cpoz::XYZLandmark lm1({ -6, 6, 0 });
-    //cpoz::XYZLandmark lm2({ -6, -6, 0 });
-    //cpoz::XYZLandmark lm3({ 6, -6, 0 });
+    cpoz::XYZLandmark lm0({ 12, -120, 0 });
+    cpoz::XYZLandmark lm1({ 0, -120, 0 });
+    cpoz::XYZLandmark lm2({ 0, -108, 0 });
 
-    //for (int i = 0; i < 5; i++)
-    //{
-        std::cout << "---------------------\n";
-        std::vector<cpoz::XYZLandmark> vlm;
-        vlm.push_back(lm0);
-        vlm.push_back(lm1);
-        vlm.push_back(lm2);
-        vlm.push_back(lm3);
-        (void)assign_landmarks(cam, vlm, cam_xyz, azim, elev);
+    std::vector<cv::Point3f> obj_pts;
+    obj_pts.push_back({ 0,0,0 });
+    obj_pts.push_back({ 12,0,0 });
+    obj_pts.push_back({ 12,12,0 });
 
-        //lm0.world_xyz.y += (90);
-        //lm1.world_xyz.y += (90);
-        //lm2.world_xyz.y += (90);
-        //lm3.world_xyz.y += (90);
-        //lm0.world_xyz.x -= 6;
-        //lm1.world_xyz.x -= 6;
-        //lm2.world_xyz.x -= 6;
-        //lm3.world_xyz.x -= 6;
+    std::cout << "---------------------\n";
+    std::vector<cpoz::XYZLandmark> vlm;
+    vlm.push_back(lm0);
+    vlm.push_back(lm1);
+    vlm.push_back(lm2);
+    (void)assign_landmarks(cam, vlm, cam_xyz, azim, elev);
 
-        std::vector<cv::Point3f> obj_pts;
-        std::vector<cv::Point2f> img_pts;
-        obj_pts.push_back({ (float)lm0.world_xyz.x, (float)lm0.world_xyz.y, (float)lm0.world_xyz.z });
-        obj_pts.push_back({ (float)lm1.world_xyz.x, (float)lm1.world_xyz.y, (float)lm1.world_xyz.z });
-        obj_pts.push_back({ (float)lm2.world_xyz.x, (float)lm2.world_xyz.y, (float)lm2.world_xyz.z });
-        img_pts.push_back({ (float)lm0.img_xy.x, (float)lm0.img_xy.y });
-        img_pts.push_back({ (float)lm1.img_xy.x, (float)lm1.img_xy.y });
-        img_pts.push_back({ (float)lm2.img_xy.x, (float)lm2.img_xy.y });
+    cv::Mat xrot = cpoz::CameraHelper::calc_axes_rotation_mat(elev, azim_f, 0);
 
+    std::vector<cv::Point2f> img_pts;
+    img_pts.push_back({ (float)vlm[0].img_xy.x, (float)vlm[0].img_xy.y });
+    img_pts.push_back({ (float)vlm[1].img_xy.x, (float)vlm[1].img_xy.y });
+    img_pts.push_back({ (float)vlm[2].img_xy.x, (float)vlm[2].img_xy.y });
+
+    {
+        std::cout << "####\n";
+        cv::Point3d r0 = lm0.world_xyz - cam_xyz;
+        cv::Point3d r1 = lm1.world_xyz - cam_xyz;
+        cv::Point3d r2 = lm2.world_xyz - cam_xyz;
+        std::cout << cv::norm(cv::Mat(r0), cv::NORM_L2) << std::endl;
+        std::cout << cv::norm(cv::Mat(r1), cv::NORM_L2) << std::endl;
+        std::cout << cv::norm(cv::Mat(r2), cv::NORM_L2) << std::endl;
+
+        cpoz::CameraHelper cam;
+        std::vector<cv::Mat> rvecs;
+        std::vector<cv::Mat> tvecs;
+            
+        cv::solveP3P(obj_pts, img_pts, cam.cam_matrix, cam.dist_coeffs, rvecs, tvecs, cv::SOLVEPNP_P3P);
+        for (auto& each : rvecs)
         {
-            std::cout << "####\n";
-            cpoz::CameraHelper cam;
-            std::vector<cv::Mat> rvecs;
-            std::vector<cv::Mat> tvecs;
-            cv::solveP3P(obj_pts, img_pts, cam.cam_matrix, cam.dist_coeffs, rvecs, tvecs, cv::SOLVEPNP_P3P);
-            for (auto& each : rvecs)
-                std::cout << each << std::endl;
-            std::cout << "----\n";
-            for (auto& each : tvecs)
-            {
-                std::cout << each << std::endl;
-                std::cout << cv::norm(each, cv::NORM_L2) << std::endl;
-            }
-            std::vector<cv::Point2f> fug; 
-            cv::projectPoints(obj_pts, rvecs[0], tvecs[0], cam.cam_matrix, cam.dist_coeffs, fug);
-            for (auto& each : fug)
-                std::cout << each << std::endl;
-            cv::projectPoints(obj_pts, rvecs[1], tvecs[1], cam.cam_matrix, cam.dist_coeffs, fug);
-            for (auto& each : fug)
-                std::cout << each << std::endl;
+            cv::Mat rot;
+            cv::Rodrigues(each, rot);
+            std::cout << each << std::endl;
+            std::cout << "XROT " << xrot << std::endl;
+            std::cout << "ROT " << rot << std::endl;
+            std::cout << "DEG " << each * cpoz::RAD2DEG << std::endl;
         }
-
-        obj_pts.push_back({ (float)lm3.world_xyz.x, (float)lm3.world_xyz.y, (float)lm3.world_xyz.z });
-        img_pts.push_back({ (float)lm3.img_xy.x, (float)lm3.img_xy.y });
-
+            
+        std::cout << "----\n";
+        for (auto& each : tvecs)
         {
-            std::cout << "####\n";
-            cpoz::CameraHelper cam;
-            cv::Mat rvecs;
-            cv::Mat tvecs;
-            cv::solvePnP(obj_pts, img_pts, cam.cam_matrix, cam.dist_coeffs, rvecs, tvecs);
-            std::cout << rvecs << std::endl;
-            std::cout << tvecs << std::endl;
-            std::cout << cv::norm(tvecs, cv::NORM_L2) << std::endl;
-            std::vector<cv::Point2f> fug;
-            cv::projectPoints(obj_pts, rvecs, tvecs, cam.cam_matrix, cam.dist_coeffs, fug);
-            for (auto& each : fug)
-                std::cout << each << std::endl;
+            std::cout << each << std::endl;
+            std::cout << cv::norm(each, cv::NORM_L2) << std::endl;
         }
+            
+        std::vector<cv::Point2f> fug; 
+        cv::projectPoints(obj_pts, rvecs[0], tvecs[0], cam.cam_matrix, cam.dist_coeffs, fug);
+        cv::Mat rot0, rot1;
+        cv::Rodrigues(rvecs[0], rot0);
+        cv::Rodrigues(rvecs[1], rot1);
+        cv::Mat q0 = rot0.t() * cv::Mat(tvecs[0]);
+        cv::Mat q1 = rot1.t() * cv::Mat(tvecs[1]);
+        std::cout << "q0 = " << q0 << std::endl;
+        std::cout << "q1 = " << q1 << std::endl;
+        for (auto& each : fug)
+            std::cout << each << std::endl;
+        cv::projectPoints(obj_pts, rvecs[1], tvecs[1], cam.cam_matrix, cam.dist_coeffs, fug);
+        for (auto& each : fug)
+            std::cout << each << std::endl;
+    }
 
-        //elev += 5 * cpoz::DEG2RAD;
-        //cam_xyz.x += 4;
-    //}
-
-
-    //{
-    //    std::cout << "####\n";
-    //    cpoz::CameraHelper cam;
-    //    std::vector<cv::Mat> rvecs;
-    //    std::vector<cv::Mat> tvecs;
-    //    cv::solveP3P(obj_pts, img_pts, cam.cam_matrix, cam.dist_coeffs, rvecs, tvecs, cv::SOLVEPNP_AP3P);
-    //    for (auto& each : rvecs)
-    //        std::cout << each << std::endl;
-    //    std::cout << "----\n";
-    //    for (auto& each : tvecs)
-    //        std::cout << each << std::endl;
-    //}
-
-    //double a1 = sqrt(24 * 24 + 120 * 120 + 48 * 48);
-    //double a2 = sqrt(36 * 36 + 120 * 120 + 48 * 48);P
-    //double aa1 = sqrt(24 * 24 + 120 * 120);
-    //double aa2 = sqrt(36 * 36 + 120 * 120);
-    //double cos_C = ((a1 * a1) + (a2 * a2) - (12 * 12)) / (2 * a1 * a2);
-    //double ang_C = acos(cos_C) * cpoz::RAD2DEG;
-    double a1 = sqrt(24 * 24 + 120 * 120 + 48 * 48);
-    double a2 = sqrt(24 * 24 + 120 * 120 + 36 * 36);
-    double aa1 = sqrt(24 * 24 + 120 * 120);
-    double aa2 = sqrt(24 * 24 + 120 * 120);
-    double cos_C = ((a1 * a1) + (a2 * a2) - (12 * 12)) / (2 * a1 * a2);
-    double ang_C = acos(cos_C) * cpoz::RAD2DEG;
-
+        
     // guesses
     cpoz::CameraHelper cam;
     double pos_elev = elev;// 10 * cpoz::DEG2RAD;
@@ -197,40 +156,6 @@ void foo()
     cam.cam_elev = pos_elev;
     cam.cam_y = cam_xyz.y;// -48;
 
-
-    cv::Point3d pt00 = { 0,0,100 };
-    cv::Point3d pt01 = cam.calc_xyz_after_rotation(pt00, elev, azim, 0.0);
-    cv::Point3d pt02 = cam.calc_xyz_after_rotation(pt01, elev, azim, 0.0, true);
-    cv::Point3d pt11 = cam.calc_xyz_after_rotation(pt00, 0, azim, 0.0);
-    cv::Point3d pt12 = cam.calc_xyz_after_rotation(pt11, elev, 0, 0.0);
-
-
-    cpoz::CameraHelper::T_TRIANG_SOL sol;
-    sol.ang0_ABC[0] = elev;
-    sol.ang0_ABC[1] = azim;
-    if (lm1.img_xy.x < lm2.img_xy.x)
-    {
-        cam.triangulate_landmarks(lm1, lm2, sol);
-    }
-    else
-    {
-        cam.triangulate_landmarks(lm2, lm1, sol);
-    }
-
-    std::cout << (sol.ang_180_err) * cpoz::RAD2DEG << std::endl;
-    std::cout << sol.ang_ABC * cpoz::RAD2DEG << ", ";
-    std::cout << sol.len_abc << std::endl;
-    std::cout << sol.ang0_ABC * cpoz::RAD2DEG << ", ";
-    std::cout << sol.len0_abc << std::endl;
-    std::cout << sol.ang1_ABC * cpoz::RAD2DEG << ", ";
-    std::cout << sol.len1_abc << std::endl;
-
-    std::cout << sol.gnd_rng_to_LM1 << std::endl;
-    std::cout << sol.gnd_rng_to_LM2 << std::endl;
-    std::cout << sol.a1 * cpoz::RAD2DEG << std::endl;
-    std::cout << sol.a2 * cpoz::RAD2DEG << std::endl;
-    std::cout << sol.a3 * cpoz::RAD2DEG << std::endl;
-    std::cout << sol.cam_xyz << std::endl;
 
     cv::Point3d pos_xyz;
 //    double pos_azim;

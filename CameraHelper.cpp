@@ -275,62 +275,6 @@ namespace cpoz
     }
 
 
-    void CameraHelper::triangulate_landmarks(
-        const XYZLandmark& rLM1,
-        const XYZLandmark& rLM2,
-        T_TRIANG_SOL& rsol) const
-    {
-        // LM1 is left landmark in image and LM2 is right landmark in image
-        // determine vectors from camera to left and right landmarks based on image coordinates
-        cv::Point3d cam_to_1 = undistort_img_xy_to_xyz(rLM1.img_xy);
-        cv::Point3d cam_to_2 = undistort_img_xy_to_xyz(rLM2.img_xy);
-
-        // calculate angle C between the left and right landmark vectors
-        // (cosine is dot product divided by product of magnitudes)
-        double mag_cam_to_1 = cv::norm(cv::Mat(cam_to_1), cv::NORM_L2);
-        double mag_cam_to_2 = cv::norm(cv::Mat(cam_to_2), cv::NORM_L2);
-        double cos_C = cam_to_1.dot(cam_to_2) / (mag_cam_to_1 * mag_cam_to_2);
-        rsol.ang_ABC[2] = acos(cos_C);
-
-        cv::Point3d v_1_to_2 = cam_to_2 - cam_to_1;
-        cv::Point3d v_2_to_1 = cam_to_1 - cam_to_2;
-        double mag_v_1_to_2 = cv::norm(cv::Mat(v_1_to_2), cv::NORM_L2);
-        double mag_v_2_to_1 = cv::norm(cv::Mat(v_2_to_1), cv::NORM_L2);
-        rsol.ang_ABC[0] = acos(v_1_to_2.dot(-cam_to_1) / (mag_cam_to_1 * mag_v_1_to_2));
-        rsol.ang_ABC[1] = acos(v_2_to_1.dot(-cam_to_2) / (mag_cam_to_2 * mag_v_2_to_1));
-
-        int i = 0;
-        cv::Point2d boo = rLM1.img_xy;
-        cv::Point3d woo = { 0, 0, 131.453 };
-        double azim_0 = atan((rLM1.img_xy.x - cx) / fx);
-        double elev_0 = 5 * cpoz::DEG2RAD;
-        while (i++ < 1000)
-        {
-            std::cout << azim_0 * cpoz::RAD2DEG << ", " << elev_0 * cpoz::RAD2DEG << std::endl;
-
-            cv::Point3d fud0 = calc_xyz_after_rotation(woo, elev_0, azim_0, 0, true);
-
-            cv::Point2d fud2 = project_xyz_to_img_xy(fud0);
-            boo = fud2;
-
-            double qx = boo.x - rLM1.img_xy.x;
-            double qy = boo.y - rLM1.img_xy.y;
-            azim_0 += atan(qx / fx);
-            elev_0 += atan(qy / fy);
-
-            rsol.ang_180_err = rsol.ang_ABC[0] + rsol.ang_ABC[1] + rsol.ang_ABC[2] - CV_PI;
-            rsol.len_abc = solve_law_of_sines(rsol.ang_ABC, 12);
-
-        }
-
-        // and we are stuck...
-
-        // ???
-        rsol.a1 = 0;
-    }
-
-
-
     cv::Point3d CameraHelper::calc_cam_to_xyz(
         const double known_Y,
         const cv::Point2d& rImgXY,
@@ -352,6 +296,7 @@ namespace cpoz
         double rescale = known_Y / world_xy1_unrot.y;
         return world_xy1_unrot * rescale;
     }
+
 
     void CameraHelper::triangulate_landmarks_ideal(
         const XYZLandmark& lmA,

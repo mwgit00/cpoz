@@ -51,7 +51,7 @@ namespace room2
 {
     const double y = -120.0;  // 10 foot ceiling
 
-    // the so-called "fixed" landmarks in corners
+    // the corner landmarks
     tMapStrToXYZ mark1 =
     { {"A", {0.0, y, 0.0}},
     {"B", {0.0, y, 192.0}},
@@ -65,7 +65,7 @@ namespace room2
     {"C", {108.0, y, 192.0}},
     {"D", {108.0, y, 0.0}} };
 
-    // vertical companion landmarks
+    // vertical companion landmarks (below the "fixed" landmarks)
     tMapStrToXYZ markv =
     { {"A", {0.0, y + 12.0, 0.0}},
     {"B", {0.0, y + 12.0, 192.0}},
