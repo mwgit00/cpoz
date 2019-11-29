@@ -21,6 +21,7 @@
 // SOFTWARE.
 
 #include <list>
+#include <iostream>
 #include "opencv2/highgui.hpp"
 #include "BGRLandmark.h"
 
@@ -59,6 +60,8 @@ namespace cpoz
         { 'L', { bgr_t::CYAN, bgr_t::BLACK, bgr_t::MAGENTA, bgr_t::BLACK }}
     };
 
+    const std::string BGRLandmark::CALIB_LABELS = "ADGJBEHKCFIL";
+
 
 
     // returns a value "railed" to fall within a max-min range
@@ -73,30 +76,13 @@ namespace cpoz
     BGRLandmark::BGRLandmark()
     {
         init();
-    #ifdef _DEBUG
-        for (int i = 0; i < 12; i++)
-        {
-            cv::Mat img1;
-            char c = i + 'A';
-            std::string s = "dbg_bgrlm_" + std::string(1, c) + ".png";
-            create_landmark_image(img1, 3.0, 0.25, PATTERN_MAP.find(c)->second, { 255,255,255 });
-            cv::imwrite(s, img1);
-        }
-        cv::Mat img2;
-        create_multi_landmark_image(img2, "ADGJBEHKCFIL", 4, 3, 0.5, 2.25, 0.25, { 192,192,192 });
-        cv::imwrite("dbg_multi.png", img2);
-        create_multi_landmark_image(img2, "AG", 2, 1, 0.5, 8, 0.0);
-        cv::imwrite("dbg_double.png", img2);
-    #endif
     }
 
 
 
     BGRLandmark::~BGRLandmark()
     {
-    #ifdef _COLLECT_SAMPLES
-        cv::imwrite("samples_1K.png", samples);
-    #endif
+        // do nothing
     }
 
 
@@ -106,30 +92,27 @@ namespace cpoz
         const double thr_corr,
         const int thr_pix_rng,
         const int thr_pix_min,
-        const int thr_bgr_rng)
+        const int thr_bgr_rng,
+        const double thr_sqdiff)
     {
         // fix k to be odd and in range 9-15
         int fixk = ((k / 2) * 2) + 1;
         kdim = apply_rail<int>(fixk, 9, 15);
-    
+
         // apply thresholds
         // TODO -- assert type is CV_8U somewhere during match
         this->thr_corr = thr_corr;
         this->thr_pix_rng = thr_pix_rng;
         this->thr_pix_min = thr_pix_min;
         this->thr_bgr_rng = thr_bgr_rng;
+        this->thr_sqdiff = thr_sqdiff;
 
         // create the B&W matching templates
-        const grid_colors_t colors = PATTERN_MAP.find('0')->second;
         cv::Mat tmpl_bgr;
-        create_template_image(tmpl_bgr, kdim, colors);
+        create_template_image(tmpl_bgr, kdim, PATTERN_MAP.find('0')->second);
         cv::cvtColor(tmpl_bgr, tmpl_gray_p, cv::COLOR_BGR2GRAY);
-        cv::rotate(tmpl_gray_p, tmpl_gray_n, cv::ROTATE_90_CLOCKWISE);
-
-    #ifdef _DEBUG
-        imwrite("dbg_tmpl_gray_p.png", tmpl_gray_p);
-        imwrite("dbg_tmpl_gray_n.png", tmpl_gray_n);
-    #endif
+        create_template_image(tmpl_bgr, kdim, PATTERN_MAP.find('1')->second);
+        cv::cvtColor(tmpl_bgr, tmpl_gray_n, cv::COLOR_BGR2GRAY);
 
         // stash offset for this template
         const int fixkh = kdim / 2;
@@ -137,11 +120,6 @@ namespace cpoz
         tmpl_offset.y = fixkh;
 
         is_color_id_enabled = true;
-
-    #ifdef _COLLECT_SAMPLES
-        samp_ct = 0;
-        samples = cv::Mat::zeros({ (kdim + 4) * sampx, (kdim + 4) * sampy }, CV_8UC3);
-    #endif
     }
 
 
@@ -200,44 +178,39 @@ namespace cpoz
             if ((rng_roi > thr_pix_rng) && (min_roi < thr_pix_min))
             {
                 // start filling in landmark info
-                landmark_info_t lminfo{ rpt + tmpl_offset, diff, rng_roi, min_roi, -1 };
+                landmark_info_t lminfo{ rpt + tmpl_offset, diff, rng_roi, min_roi, -1, 0.0 };
 
                 cv::Mat img_roi_bgr(rsrc_bgr(roi));
+                cv::Mat img_roi_gray(rsrc(roi));
 
-    #ifdef _COLLECT_SAMPLES
-                if (samp_ct < 1000)
+                // use strong bilateral filter to suppress as much noise as possible in ROI
+                // while also preserving edges between colored regions
+                cv::Mat img_roi_bgr_filt;
+                cv::bilateralFilter(img_roi_bgr, img_roi_bgr_filt, 3, 200, 200);
+
+                // then convert filtered image to gray and equalize
+                cv::Mat img_filt_equ;
+                cv::cvtColor(img_roi_bgr_filt, img_filt_equ, cv::COLOR_BGR2GRAY);
+                cv::equalizeHist(img_filt_equ, img_filt_equ);
+
+                // sqdiff shape test on filtered and equalized ROI
+                cv::Mat tmatchx;
+                cv::Mat& rtmpl = (lminfo.diff > 0) ? tmpl_gray_p : tmpl_gray_n;
+                matchTemplate(img_filt_equ, rtmpl, tmatchx, cv::TM_SQDIFF_NORMED);
+                lminfo.rmatch = tmatchx.at<float>(0, 0);
+                bool is_sqdiff_test_ok = (lminfo.rmatch < thr_sqdiff);
+
+                // optional color test
+                bool is_color_test_ok = true;
+                if (is_sqdiff_test_ok && is_color_id_enabled)
                 {
-                    int k = tmpl_gray_p.size().width + 4;
-                    int x = (samp_ct % sampx) * k;
-                    int y = (samp_ct / sampx) * k;
-                    cv::Rect roi0 = { {x,y}, cv::Size(k,k) };
-                    cv::Rect roi1 = { {x + 1, y + 1}, cv::Size(k - 2, k - 2) };
-                    // surround each sample with a white border that can be manually re-colored
-                    cv::rectangle(samples, roi1, { 255,255,255 });
-                    cv::Rect roi2 = { {x + 2, y + 2}, cv::Size(k - 4, k - 4) };
-                    img_roi_bgr.copyTo(samples(roi2));
-                    samp_ct++;
+                    identify_colors(img_roi_bgr_filt, lminfo);
+                    is_color_test_ok = (lminfo.code != -1);
                 }
-    #endif
 
-                // TODO -- maybe add some kind of additional shape test
-            
-                if (is_color_id_enabled)
+                if (is_sqdiff_test_ok && is_color_test_ok)
                 {
-                    // use bilateral filter to suppress as much noise as possible in ROI
-                    // while also preserving sharp edges
-                    cv::Mat img_roi_bgr_proc;
-                    cv::bilateralFilter(img_roi_bgr, img_roi_bgr_proc, 3, 200, 200);
-                    identify_colors(img_roi_bgr_proc, lminfo);
-
-                    // save it if color test gave a sane result
-                    if (lminfo.code != -1)
-                    {
-                        rinfo.push_back(lminfo);
-                    }
-                }
-                else
-                {
+                    // this is a landmark
                     rinfo.push_back(lminfo);
                 }
             }
@@ -394,10 +367,6 @@ namespace cpoz
         // central point gets average of all squares
         cv::Scalar avg_all = (colors[0] + colors[1] + colors[2] + colors[3]) / 4;
         cv::line(rimg, { kh, kh }, { kh, kh }, avg_all);
-
-    #ifdef _DEBUG
-        cv::imwrite("dbg_tmpl_bgr.png", rimg);
-    #endif
     }
 
 
@@ -447,9 +416,9 @@ namespace cpoz
         double s0 = p0[0] + p0[1] + p0[2];
         double s1 = p1[0] + p1[1] + p1[2];
 
-        // see if there's enough range in BGR components
-        // for a valid yellow-magenta-cyan classification
-        if ((p0rng > thr_bgr_rng) && (p1rng > thr_bgr_rng))
+        // see if there's enough range in BGR components for valid yellow-magenta-cyan classification
+        // also apply small threshold to BGR "score" (larger threshold eliminates too many good matches)
+        if ((p0rng > thr_bgr_rng) && (p1rng > thr_bgr_rng) && (s0 > 1.1) && (s1 > 1.1))
         {
             const double BGR_EPS = 1.0e-6;
             int nc0 = -1;

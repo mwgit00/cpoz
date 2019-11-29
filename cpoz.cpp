@@ -30,6 +30,7 @@
 #include "opencv2/imgcodecs.hpp"
 #include "opencv2/highgui.hpp"
 #include "opencv2/videoio.hpp"
+#include <opencv2/calib3d.hpp>
 
 #include "room_test.h"
 #include "room1.h"
@@ -53,7 +54,6 @@ using namespace cv;
 
 
 static bool is_rec_enabled = false;
-static bool is_cal_enabled = false;
 static bool is_loc_enabled = false;
 const char * stitle = "CPOZ Test Application";
 int n_record_ctr = 0;
@@ -142,7 +142,6 @@ bool wait_and_check_keys()
         {
             switch (ckey)
             {
-            case 'c': is_cal_enabled = !is_cal_enabled; break;
             case 'r': is_rec_enabled = !is_rec_enabled; break;
             case 'l': is_loc_enabled = !is_loc_enabled; break;
             default: break;
@@ -172,27 +171,21 @@ void image_output(cv::Mat& rimg)
 }
 
 
-void loop_cal(void)
+void loop(void)
 {
-    const int max_good_ct = 20;
-
-    std::vector<std::vector<cv::Vec2f>> vvcal;
-    std::vector<std::string> vcalfiles;
-    std::set<int> cal_label_set;
-    int cal_good_ct = 0;
-    int cal_ct = 0;
-
     cpoz::XYZLandmark lm0({-6, -72.0, 0 });
     cpoz::XYZLandmark lm1({6, -71.5, 0});
 
     cpoz::CameraHelper cam;
-    //cam.load("cal_final.yaml");
+    cam.load(".\\calib_01\\cal_final.yaml");
+   
     cam.cam_y = -44.0;
     cam.cam_elev = 0.0;
 
     Size capture_size;
     Point ptmax;
 
+    Mat img_viewer_0;
     Mat img_viewer;
     Mat img_gray;
     Mat tmatch;
@@ -213,13 +206,20 @@ void loop_cal(void)
     vcap >> img_viewer;
     capture_size = img_viewer.size();
 
+    Mat map1;
+    Mat map2;
+    initUndistortRectifyMap(
+        cam.cam_matrix, cam.dist_coeffs,
+        cv::Mat(), cam.cam_matrix, capture_size, CV_32FC1, map1, map2);
+
     // and the image processing loop is running...
     bool is_running = true;
 
     while (is_running)
     {
         // grab image
-        vcap >> img_viewer;
+        vcap >> img_viewer_0;
+        remap(img_viewer_0, img_viewer, map1, map2, INTER_LINEAR);
 
         // combine all channels into grayscale
         cvtColor(img_viewer, img_gray, COLOR_BGR2GRAY);
@@ -228,120 +228,44 @@ void loop_cal(void)
         std::vector<cpoz::BGRLandmark::landmark_info_t> qinfo;
         bgrm.perform_match(img_viewer, img_gray, tmatch, qinfo);
 
-#ifdef _COLLECT_SAMPLES
-        std::cout << bgrm.samp_ct << std::endl;
-#endif
-
-        if (true)
+        for (const auto& r : qinfo)
         {
-            // sort landmark info by label code
-            // and check for proper quantity and uniqueness
-            std::sort(qinfo.begin(), qinfo.end(), cpoz::BGRLandmark::compare_by_code);
-            for (const auto& r : qinfo)
-            {
-                cal_label_set.insert(r.code);
-            }
-            bool is_good_grid = ((qinfo.size() == 12) && (cal_label_set.size() == 12));
-
-            // draw circles around all BGR landmarks and put labels by each one
-            // unless about to snap a calibration image which can't have the circles
-            if ((cal_good_ct < (max_good_ct - 3)) || (cal_good_ct >= max_good_ct))
-            {
-                if (is_good_grid)
-                {
-                    cv::Point prev(0, 0);
-                    for (const auto& r : qinfo)
-                    {
-                        cv::Point pt(r.ctr);
-                        if (prev != cv::Point(0,0))
-                        {
-                            cv::line(img_viewer, prev, pt, SCA_YELLOW, 1);
-                        }
-                        prev = pt;
-
-                        char x[2] = { 0 };
-                        x[0] = static_cast<char>(r.code) + 'A';
-                        circle(img_viewer, r.ctr, 7, (r.diff > 0.0) ? SCA_RED : SCA_BLUE, 3);
-                        putText(img_viewer, std::string(x), r.ctr, FONT_HERSHEY_PLAIN, 2.0, SCA_GREEN, 2);
-                    }
-                }
-            }
-
-            if (is_loc_enabled)
-            {
-                if (qinfo.size() == 2)
-                {
-                    // refine corner positions
-                    std::vector<cv::Point2f> vpt;
-                    vpt.push_back(qinfo[0].ctr);
-                    vpt.push_back(qinfo[1].ctr);
-                    cv::TermCriteria tc_corners(
-                        cv::TermCriteria::MAX_ITER | cv::TermCriteria::EPS,
-                        50, // max number of iterations
-                        0.0001);
-                    cv::cornerSubPix(img_gray, vpt, { 5,5 }, { -1,-1 }, tc_corners);
-                    lm0.set_img_xy(vpt[0]);
-                    lm1.set_img_xy(vpt[1]);
-                    
-                    cv::Point3d xyz;
-                    double azim;
-                    if (lm0.img_xy.x < lm1.img_xy.x)
-                    {
-                        cam.triangulate_landmarks_ideal(lm0, lm1, xyz, azim);
-                    }
-                    else
-                    {
-                        cam.triangulate_landmarks_ideal(lm1, lm0, xyz, azim);
-                    }
-                    std::cout << xyz.x << ", " << xyz.z << " " << azim * cpoz::RAD2DEG << std::endl;
-                }
-            }
-
-            // in this loop, use mask flag as calibration grab mode
-            // the image is dumped to file if 12 unique landmarks found (3x4 pattern)
-            // then user must "hide" some landmarks to trigger another grab
-            if (is_cal_enabled)
-            {
-                if (is_good_grid)
-                {
-                    if (cal_good_ct < max_good_ct)
-                    {
-                        cal_good_ct++;
-                        if (cal_good_ct == max_good_ct)
-                        {
-                            // save snapshot of image
-                            std::ostringstream osx;
-                            osx << "img_" << std::setfill('0') << std::setw(5) << cal_ct << ".png";
-                            std::string sfile = osx.str();
-                            imwrite(CALIB_PATH + sfile, img_viewer);
-                            vcalfiles.push_back(sfile);
-                            std::cout << "CALIB. SNAP " << sfile << std::endl;
-                            
-                            // image points have already been sorted
-                            std::vector<cv::Vec2f> vimgpts;
-                            for (const auto& r : qinfo)
-                            {
-                                vimgpts.push_back(cv::Vec2f(
-                                    static_cast<float>(r.ctr.x),
-                                    static_cast<float>(r.ctr.y)));
-                            }
-                            vvcal.push_back(vimgpts);
-                            cal_ct++;
-                        }
-                    }
-                }
-                else
-                {
-                    cal_good_ct = 0;
-                }
-            }
-            else
-            {
-                // calibration mode turned off
-                cal_good_ct = 0;
-                cal_ct = 0;
-            }
+            char x[2] = { 0 };
+            x[0] = static_cast<char>(r.code) + 'A';
+            circle(img_viewer, r.ctr, 4, (r.diff > 0.0) ? SCA_RED : SCA_BLUE, -1);
+            circle(img_viewer, r.ctr, 2, SCA_WHITE, -1);
+            putText(img_viewer, std::string(x), r.ctr, FONT_HERSHEY_PLAIN, 2.0, SCA_GREEN, 2);
         }
+
+        //if (is_loc_enabled)
+        //{
+        //    if (qinfo.size() == 2)
+        //    {
+        //        // refine corner positions
+        //        std::vector<cv::Point2f> vpt;
+        //        vpt.push_back(qinfo[0].ctr);
+        //        vpt.push_back(qinfo[1].ctr);
+        //        cv::TermCriteria tc_corners(
+        //            cv::TermCriteria::MAX_ITER | cv::TermCriteria::EPS,
+        //            50, // max number of iterations
+        //            0.0001);
+        //        cv::cornerSubPix(img_gray, vpt, { 5,5 }, { -1,-1 }, tc_corners);
+        //        lm0.set_img_xy(vpt[0]);
+        //        lm1.set_img_xy(vpt[1]);
+        //            
+        //        cv::Point3d xyz;
+        //        double azim;
+        //        if (lm0.img_xy.x < lm1.img_xy.x)
+        //        {
+        //            cam.triangulate_landmarks_ideal(lm0, lm1, xyz, azim);
+        //        }
+        //        else
+        //        {
+        //            cam.triangulate_landmarks_ideal(lm1, lm0, xyz, azim);
+        //        }
+        //        std::cout << xyz.x << ", " << xyz.z << " " << azim * cpoz::RAD2DEG << std::endl;
+        //    }
+        //}
 
         // always show best match contour and target dot on BGR image
         image_output(img_viewer);
@@ -353,35 +277,6 @@ void loop_cal(void)
     // when everything is done, release the capture device and windows
     vcap.release();
     cv::destroyAllWindows();
-
-    // dump cal data if still in cal mode
-    if (is_cal_enabled)
-    {
-        // the BGRLandmark calibration pattern has 12 corners A-L in ordering shown below
-        // so the corners array must be initialized in same order
-        // A D G J
-        // B E H K
-        // C F I L
-        std::vector<Point3f> vgridpts;
-        double grid_square = 2.25;
-        Size board_size(4, 3);
-        for (int j = 0; j < board_size.width; j++)
-        {
-            for (int i = 0; i < board_size.height; i++)
-            {
-                vgridpts.push_back(cv::Point3f(float(j * grid_square), float(i * grid_square), 0));
-            }
-        }
-        cv::FileStorage cvfs;
-        std::string scvfs = std::string(CALIB_PATH) + std::string("cal_meta.yaml");
-        cvfs.open(scvfs, cv::FileStorage::WRITE);
-        cvfs << "image_size" << capture_size;
-        cvfs << "grid_size" << board_size;
-        cvfs << "grid_square" << grid_square;
-        cvfs << "grid_pts" << vgridpts;
-        cvfs << "files" << vcalfiles;
-        cvfs << "points" << vvcal;
-    }
 }
 
 
@@ -392,8 +287,9 @@ int main()
     //foo();
     //return 0;
     //cpoz::CameraHelper cam;
-    //cam.cal(".\\calib");
+    //cam.cal(".\\calib_01");
+    //cam.cal(".\\calib_02");
     //test_room1();
-    test_room2();
-    //loop_cal();
+    //test_room2();
+    loop();
 }

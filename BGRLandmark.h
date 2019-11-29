@@ -23,9 +23,6 @@
 #ifndef BGR_LANDMARK_H_
 #define BGR_LANDMARK_H_
 
-// uncomment line below to collect up to 1000 samples and write them to an image file when done
-//#define _COLLECT_SAMPLES
-
 #include <map>
 #include "opencv2/imgproc.hpp"
 
@@ -43,6 +40,7 @@ namespace cpoz
             double rng;         // range of pixels in candidate ROI
             double min;         // min pixel in candidate ROI
             int code;           // color code, -1 for unknown, else 0-11
+            double rmatch;      // sqdiff match metric
         } landmark_info_t;
 
         // names of colors with 0 or 255 as the BGR components
@@ -74,6 +72,9 @@ namespace cpoz
         // the supported landmark color patterns
         static const std::map<char, grid_colors_t> PATTERN_MAP;
 
+        // default corner labels for 4x3 calibration pattern
+        static const std::string CALIB_LABELS;
+
     public:
 
         BGRLandmark();
@@ -85,7 +86,8 @@ namespace cpoz
             const double thr_corr = 1.6,    // threshold for dual match (range is 0.0 to 2.0)
             const int thr_pix_rng = 40,     // grey image pixel range threshold for pre-proc
             const int thr_pix_min = 70,     // grey image dark pixel threshold for pre-proc
-            const int thr_bgr_rng = 20);    // range in BGR required for color matching step
+            const int thr_bgr_rng = 20,     // range in BGR required for color matching step
+            const double thr_sqdiff = 0.18);
 
         // runs the match on an original BGR image and possibly pre-processed gray image
         // it returns a gray image with the raw template match and a vector of landmark info
@@ -94,6 +96,9 @@ namespace cpoz
             const cv::Mat& rsrc,
             cv::Mat& rtmatch,
             std::vector<BGRLandmark::landmark_info_t>& rpts);
+
+        const cv::Mat& get_template_p(void) const { return tmpl_gray_p; }
+        const cv::Mat& get_template_n(void) const { return tmpl_gray_n; }
 
         // gets centering offset for the landmark template
         const cv::Point& get_template_offset(void) const { return tmpl_offset; }
@@ -158,6 +163,7 @@ namespace cpoz
         int thr_pix_rng;
         int thr_pix_min;
         int thr_bgr_rng;
+        double thr_sqdiff;
 
         // templates for 2x2 checkerboard grid
         cv::Mat tmpl_gray_p;
@@ -168,14 +174,6 @@ namespace cpoz
 
         // flag for controlling color ID function
         bool is_color_id_enabled;
-
-#ifdef _COLLECT_SAMPLES
-    public:
-        const int sampx = 40;
-        const int sampy = 25;
-        int samp_ct;
-        cv::Mat samples;
-#endif
     };
 }
 
