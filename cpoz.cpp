@@ -177,7 +177,11 @@ void loop(void)
     cpoz::XYZLandmark lm1({6, -71.5, 0});
 
     cpoz::CameraHelper cam;
-    cam.load(".\\calib_01\\cal_final.yaml");
+    cam.load(".\\calib_03\\cal_final.yaml");
+
+    std::vector<cv::Vec3f> vaxis = { {154, 0, 0}, {0,154,0}, {0,0,-77} };
+    std::vector<cv::Vec3f> vpattpts = { {0,0,0}, {154,0,0}, {154, 154, 0}, {0,154,0} };
+    std::map<int, cpoz::BGRLandmark::landmark_info_t> map_pts;
    
     cam.cam_y = -44.0;
     cam.cam_elev = 0.0;
@@ -228,8 +232,10 @@ void loop(void)
         std::vector<cpoz::BGRLandmark::landmark_info_t> qinfo;
         bgrm.perform_match(img_viewer, img_gray, tmatch, qinfo);
 
+        map_pts.clear();
         for (const auto& r : qinfo)
         {
+            map_pts[r.code] = r;
             char x[2] = { 0 };
             x[0] = static_cast<char>(r.code) + 'A';
             circle(img_viewer, r.ctr, 4, (r.diff > 0.0) ? SCA_RED : SCA_BLUE, -1);
@@ -237,35 +243,60 @@ void loop(void)
             putText(img_viewer, std::string(x), r.ctr, FONT_HERSHEY_PLAIN, 2.0, SCA_GREEN, 2);
         }
 
-        //if (is_loc_enabled)
-        //{
-        //    if (qinfo.size() == 2)
-        //    {
-        //        // refine corner positions
-        //        std::vector<cv::Point2f> vpt;
-        //        vpt.push_back(qinfo[0].ctr);
-        //        vpt.push_back(qinfo[1].ctr);
-        //        cv::TermCriteria tc_corners(
-        //            cv::TermCriteria::MAX_ITER | cv::TermCriteria::EPS,
-        //            50, // max number of iterations
-        //            0.0001);
-        //        cv::cornerSubPix(img_gray, vpt, { 5,5 }, { -1,-1 }, tc_corners);
-        //        lm0.set_img_xy(vpt[0]);
-        //        lm1.set_img_xy(vpt[1]);
-        //            
-        //        cv::Point3d xyz;
-        //        double azim;
-        //        if (lm0.img_xy.x < lm1.img_xy.x)
-        //        {
-        //            cam.triangulate_landmarks_ideal(lm0, lm1, xyz, azim);
-        //        }
-        //        else
-        //        {
-        //            cam.triangulate_landmarks_ideal(lm1, lm0, xyz, azim);
-        //        }
-        //        std::cout << xyz.x << ", " << xyz.z << " " << azim * cpoz::RAD2DEG << std::endl;
-        //    }
-        //}
+        if (is_loc_enabled)
+        {
+            if (qinfo.size() == 4)
+            {
+                // refine corner positions
+                std::vector<cv::Point2f> vpt;
+                vpt.push_back(map_pts[0].ctr);
+                vpt.push_back(map_pts[6].ctr);
+                vpt.push_back(map_pts[4].ctr);
+                vpt.push_back(map_pts[10].ctr);
+                cv::TermCriteria tc_corners(
+                    cv::TermCriteria::MAX_ITER | cv::TermCriteria::EPS,
+                    50, // max number of iterations
+                    0.0001);
+                cornerSubPix(img_gray, vpt, { 5,5 }, { -1,-1 }, tc_corners);
+
+                Mat rvec;
+                Mat tvec;
+                bool is_ok = solvePnP(
+                    vpattpts, vpt, cam.cam_matrix, cam.dist_coeffs,
+                    rvec, tvec, false, SOLVEPNP_AP3P);
+
+                if (is_ok)
+                {
+                    // draw axes just like in Python example found online
+                    std::vector<Point2f> ifoo;
+                    projectPoints(vaxis, rvec, tvec, cam.cam_matrix, cam.dist_coeffs, ifoo);
+                    line(img_viewer, map_pts[0].ctr, ifoo[0], SCA_GREEN, 5);
+                    line(img_viewer, map_pts[0].ctr, ifoo[1], SCA_BLUE, 5);
+                    line(img_viewer, map_pts[0].ctr, ifoo[2], SCA_RED, 5);
+                    std::cout << cv::norm(cv::Mat(tvec), cv::NORM_L2) << std::endl;
+                    //std::cout << rvec << std::endl;
+                    //cv::Mat rot;
+                    //cv::Rodrigues(rvec, rot);
+                    //cv::Mat q0 = -rot.t() * cv::Mat(tvec);
+                    //std::cout << "q0 = " << q0.t() << std::endl;
+                    //std::cout << "meh" << std::endl;
+                }
+                //lm0.set_img_xy(vpt[0]);
+                //lm1.set_img_xy(vpt[1]);
+                //    
+                //cv::Point3d xyz;
+                //double azim;
+                //if (lm0.img_xy.x < lm1.img_xy.x)
+                //{
+                //    cam.triangulate_landmarks_ideal(lm0, lm1, xyz, azim);
+                //}
+                //else
+                //{
+                //    cam.triangulate_landmarks_ideal(lm1, lm0, xyz, azim);
+                //}
+                //std::cout << xyz.x << ", " << xyz.z << " " << azim * cpoz::RAD2DEG << std::endl;
+            }
+        }
 
         // always show best match contour and target dot on BGR image
         image_output(img_viewer);
@@ -286,8 +317,8 @@ int main()
     std::cout << stitle << std::endl;
     //foo();
     //return 0;
-    //cpoz::CameraHelper cam;
-    //cam.cal(".\\calib_01");
+    cpoz::CameraHelper cam;
+    cam.cal(".\\calib_03");
     //cam.cal(".\\calib_02");
     //test_room1();
     //test_room2();

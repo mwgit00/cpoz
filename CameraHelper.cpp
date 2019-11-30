@@ -105,12 +105,15 @@ namespace cpoz
 #endif
             }
 
+            // not sure which flags are best
+            // these are fast:  cv::CALIB_USE_QR, cv::CALIB_USE_LU
+            // not sure about this:  (cv::CALIB_RATIONAL_MODEL | cv::CALIB_FIX_K3)
             std::vector<std::vector<cv::Point3f>> object_pts(vvcalpts.size(), vgridpts);
             cv::Mat cameraMatrix;
             cv::Mat distCoeffs;
             std::vector<cv::Mat> rvecs;
             std::vector<cv::Mat> tvecs;
-            int flags = cv::CALIB_USE_LU; // cv::CALIB_RATIONAL_MODEL | cv::CALIB_FIX_K3
+            int flags = cv::CALIB_USE_LU;
 
             // use the old-school calibration command
             double rms = calibrateCamera(object_pts, vvcalpts, img_sz,
@@ -141,6 +144,7 @@ namespace cpoz
                 double reproj_err = std::sqrt(total_err / total_pts);
 #endif
                 std::cout << "Calibration successful!!!" << std::endl;
+                std::cout << "RMS = " << rms << std::endl;
                 cv::FileStorage fsout;
                 fsout.open(rs + "\\cal_final.yaml", cv::FileStorage::WRITE);
                 if (fsout.isOpened())
