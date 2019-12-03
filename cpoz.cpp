@@ -142,8 +142,8 @@ bool wait_and_check_keys()
         {
             switch (ckey)
             {
-            case 'r': is_rec_enabled = !is_rec_enabled; break;
-            case 'l': is_loc_enabled = !is_loc_enabled; break;
+            case 'r': is_rec_enabled = !is_rec_enabled; std::cout << "REC\n"; break;
+            case 'l': is_loc_enabled = !is_loc_enabled; std::cout << "LOC\n"; break;
             default: break;
             }
         }
@@ -178,11 +178,31 @@ void loop(void)
 
     cpoz::CameraHelper cam;
     cam.load(".\\calib_03\\cal_final.yaml");
-
-    std::vector<cv::Vec3f> vaxis = { {154, 0, 0}, {0,154,0}, {0,0,-77} };
-    std::vector<cv::Vec3f> vpattpts = { {0,0,0}, {154,0,0}, {154, 154, 0}, {0,154,0} };
     std::map<int, cpoz::BGRLandmark::landmark_info_t> map_pts;
-   
+
+#if 0
+    // L-shaped landmark pattern:
+    //
+    // B F C
+    // D
+    // G
+    std::vector<cv::Vec3f> vaxis = { {154, 0, 0}, {77, 77, 0}, {77, 0, -77} }; // L-corner
+    std::vector<cv::Vec3f> vpattpts = { {77,0,0}, {154,0,0}, {0,77,0}, {0,154,0} }; // F, C, D, G
+    const int mkr[4] = { 5,2,3,6 };
+    const int cix = 5;
+    const int numx = 5;
+#else
+    // Square landmark pattern
+    // 
+    // A G
+    // K E
+    std::vector<cv::Vec3f> vaxis = { {77, 0, 0}, {0, 77, 0}, {0, 0, -77} }; // L-corner
+    std::vector<cv::Vec3f> vpattpts = { {0,0,0}, {154,0,0}, {154,154,0}, {0,154,0} }; // A, G, E, K
+    const int mkr[4] = { 0,6,4,10 };
+    const int cix = 0;
+    const int numx = 4;
+#endif
+
     cam.cam_y = -44.0;
     cam.cam_elev = 0.0;
 
@@ -195,6 +215,7 @@ void loop(void)
     Mat tmatch;
 
     cpoz::BGRLandmark bgrm;
+    bgrm.init(9, 1.5, 30);
 
     // need a 0 as argument
     VideoCapture vcap(0);
@@ -245,14 +266,14 @@ void loop(void)
 
         if (is_loc_enabled)
         {
-            if (qinfo.size() == 4)
+            if (qinfo.size() == numx)
             {
                 // refine corner positions
                 std::vector<cv::Point2f> vpt;
-                vpt.push_back(map_pts[0].ctr);
-                vpt.push_back(map_pts[6].ctr);
-                vpt.push_back(map_pts[4].ctr);
-                vpt.push_back(map_pts[10].ctr);
+                vpt.push_back(map_pts[mkr[0]].ctr);
+                vpt.push_back(map_pts[mkr[1]].ctr);
+                vpt.push_back(map_pts[mkr[2]].ctr);
+                vpt.push_back(map_pts[mkr[3]].ctr);
                 cv::TermCriteria tc_corners(
                     cv::TermCriteria::MAX_ITER | cv::TermCriteria::EPS,
                     50, // max number of iterations
@@ -263,24 +284,24 @@ void loop(void)
                 Mat tvec;
                 bool is_ok = solvePnP(
                     vpattpts, vpt, cam.cam_matrix, cam.dist_coeffs,
-                    rvec, tvec, false, SOLVEPNP_AP3P);
+                    rvec, tvec, false, SOLVEPNP_P3P);
 
                 if (is_ok)
                 {
                     // draw axes just like in Python example found online
                     std::vector<Point2f> ifoo;
                     projectPoints(vaxis, rvec, tvec, cam.cam_matrix, cam.dist_coeffs, ifoo);
-                    line(img_viewer, map_pts[0].ctr, ifoo[0], SCA_GREEN, 5);
-                    line(img_viewer, map_pts[0].ctr, ifoo[1], SCA_BLUE, 5);
-                    line(img_viewer, map_pts[0].ctr, ifoo[2], SCA_RED, 5);
-                    std::cout << cv::norm(cv::Mat(tvec), cv::NORM_L2) << std::endl;
-                    //std::cout << rvec << std::endl;
-                    //cv::Mat rot;
-                    //cv::Rodrigues(rvec, rot);
-                    //cv::Mat q0 = -rot.t() * cv::Mat(tvec);
-                    //std::cout << "q0 = " << q0.t() << std::endl;
-                    //std::cout << "meh" << std::endl;
+                    line(img_viewer, map_pts[cix].ctr, ifoo[0], SCA_GREEN, 5);
+                    line(img_viewer, map_pts[cix].ctr, ifoo[1], SCA_BLUE, 5);
+                    line(img_viewer, map_pts[cix].ctr, ifoo[2], SCA_RED, 5);
+                    std::cout << cv::norm(cv::Mat(tvec), cv::NORM_L2) << ":  ";
+
+                    cv::Mat rot;
+                    cv::Rodrigues(rvec, rot);
+                    cv::Mat pos = -rot.t() * cv::Mat(tvec);
+                    std::cout << "pos = " << pos.t() << std::endl;
                 }
+
                 //lm0.set_img_xy(vpt[0]);
                 //lm1.set_img_xy(vpt[1]);
                 //    
@@ -315,10 +336,7 @@ void loop(void)
 int main()
 {
     std::cout << stitle << std::endl;
-    //foo();
-    //return 0;
     cpoz::CameraHelper cam;
-    cam.cal(".\\calib_03");
     //cam.cal(".\\calib_02");
     //test_room1();
     //test_room2();
