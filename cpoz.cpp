@@ -38,6 +38,7 @@
 #include "BGRLandmark.h"
 #include "CameraHelper.h"
 #include "XYZLandmark.h"
+#include "FakeLidar.h"
 
 using namespace cv;
 
@@ -336,9 +337,20 @@ void loop(void)
 int main()
 {
     std::cout << stitle << std::endl;
-    cpoz::CameraHelper cam;
+    //cpoz::CameraHelper cam;
+    cpoz::FakeLidar lidar;
     //cam.cal(".\\calib_02");
     //test_room1();
     //test_room2();
-    loop();
+    //loop();
+    lidar.init_scan_angs(0.0, 360.0, 1.0);
+    lidar.load_floorplan(".\\docs\\apt_1cmpp.png");
+
+    lidar.set_pos({ 400, 400 });
+    Mat ifoo;
+    std::vector<double> vscan;
+    lidar.run_scan(vscan);
+    lidar.draw_scan(ifoo, vscan);
+    imwrite("chud.png", ifoo);
+
 }

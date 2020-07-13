@@ -159,6 +159,7 @@
   <ItemGroup>
     <ClCompile Include="BGRLandmark.cpp" />
     <ClCompile Include="cpoz.cpp" />
+    <ClCompile Include="FakeLidar.cpp" />
     <ClCompile Include="room1.cpp" />
     <ClCompile Include="CameraHelper.cpp" />
     <ClCompile Include="room2.cpp" />
@@ -168,6 +169,7 @@
   <ItemGroup>
     <ClInclude Include="BGRLandmark.h" />
     <ClInclude Include="CameraHelper.h" />
+    <ClInclude Include="FakeLidar.h" />
     <ClInclude Include="room1.h" />
     <ClInclude Include="room2.h" />
     <ClInclude Include="room_test.h" />
