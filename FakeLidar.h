@@ -40,6 +40,7 @@ namespace cpoz
         void init_scan_angs(const double deg0, const double deg1, const double step);
 
         void run_scan(std::vector<double>& rvec);
+        void run_scan2(std::vector<double>& rvec);
         void draw_scan(cv::Mat& rimg, const std::vector<double>& rvec);
 
     private:

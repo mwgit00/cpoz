@@ -343,13 +343,18 @@ int main()
     //test_room1();
     //test_room2();
     //loop();
+
+    // 8000 samples/s, 2Hz-10Hz ???
     lidar.init_scan_angs(0.0, 360.0, 1.0);
     lidar.load_floorplan(".\\docs\\apt_1cmpp.png");
 
     lidar.set_pos({ 400, 400 });
+    lidar.set_pos({ 525, 185 });
+    //lidar.set_pos({ 450, 670 });
+    //lidar.set_pos({ 52, 420 });
     Mat ifoo;
     std::vector<double> vscan;
-    lidar.run_scan(vscan);
+    lidar.run_scan2(vscan);
     lidar.draw_scan(ifoo, vscan);
     imwrite("chud.png", ifoo);
 

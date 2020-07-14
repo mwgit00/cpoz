@@ -46,7 +46,7 @@ namespace cpoz
         img_floorplan = imread(rspath, IMREAD_GRAYSCALE);
         Mat img_test = Mat(img_floorplan.size(), CV_8U);
         Mat img_binary = (img_floorplan < 240);
-        findContours(img_binary, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_NONE);// cv::CHAIN_APPROX_SIMPLE);
+        findContours(img_binary, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
         drawContours(img_test, contours, 0, 128, 1);
         imwrite("crud.png", img_test);
     }
@@ -74,12 +74,14 @@ namespace cpoz
                 int dx = static_cast<int>(scan_cos_sin[nn].x * mag);
                 int dy = static_cast<int>(scan_cos_sin[nn].y * mag);
                 line(rimg, pos, { pos.x + dx, pos.y + dy }, 32);
+                circle(rimg, { pos.x + dx, pos.y + dy }, 3, 64, -1);
             }
         }
     }
 
     void FakeLidar::run_scan(std::vector<double>& rvec)
     {
+        // use cv::CHAIN_APPROX_NONE
         rvec.clear();
         size_t sz = contours[0].size();
 
@@ -107,15 +109,16 @@ namespace cpoz
                 cv::Point pt0 = contours[0][nn];
                 double rng = vecr[nn];
 
-                // project ray by that distance to get a point
+                // project sensor direction ray
+                // magnitude is distance to contour point
                 double qx = pos.x + (rng * r.x);
                 double qy = pos.y + (rng * r.y);
                 double qdx = qx - pt0.x;
                 double qdy = qy - pt0.y;
 
-                // see how close that point is to contour point
+                // see how close that projected point is to contour point
                 double qrpts = sqrt((qdx * qdx) + (qdy * qdy));
-                if (qrpts < sqrt(2.0))
+                if (qrpts < sqrt(2.0) / 2.0)
                 {
                     // possible match
                     if (rng < rmin)
@@ -123,68 +126,116 @@ namespace cpoz
                         rmin = rng;
                     }
                 }
-#if 0
-                // solve parametric system where rays from pt0 and pt1 intersect
-                //
-                // a1 + (dx1 * t1) = (dx0 * t0) + a0   equ #1
-                // b1 + (dy1 * t1) = (dy0 * t0) + b0   equ #2
-
-                // t1 = ((dx0 * t0) + a0 - a1) / dx1   equ #3
-                // t1 = ((dy0 * t0) + b0 - b1) / dy1   equ #4
-
-                // substitue #3 into #2  (|dx1| > 0)
-                //
-                // b1 - b0 + (dy1 * (((dx0 * t0) + a0 - a1) / dx1)) = (dy0 * t0)
-                // dx1*(b1 - b0) + (dy1 * (dx0 * t0)) + dy1*(a0 - a1) = (dy0 * t0)*dx1
-                // dx1*(b1 - b0) + (dy1 * (a0 - a1)) = (dy0 * t0)*dx1 - (dy1 * ((dx0 * t0))
-
-                // determine length of current segment
-                // and unit vector from start point
-                double dx1 = pt1.x - pt0.x;
-                double dy1 = pt1.y - pt0.y;
-                double seglen = sqrt((dx1 * dx1) + (dy1 * dy1));
-                dx1 = dx1 / seglen;
-                dy1 = dy1 / seglen;
-                double a1 = pt0.x;
-                double b1 = pt0.y;
-
-                double dx0 = r.x;
-                double dy0 = r.y;
-                double a0 = pos.x;
-                double b0 = pos.y; // neg???
-
-                if (abs(dx1) > 1e-6)
-                {
-                    // solve for t0 and then t1
-                    double t0 = ((dx1 * (b1 - b0)) + (dy1 * (a0 - a1))) / ((dx1 * dy0) - (dx0 * dy1));
-                    double t1 = ((dx0 * t0) + a0 - a1) / dx1;
-                    
-                    double xr = (t0 * r.x);
-                    double yr = (t0 * r.y);
-                    
-                    double x0 = xr + a0;
-                    double y0 = yr + b0;
-
-                    double x1 = (t1 * dx1) + a1;
-                    double y1 = (t1 * dy1) + b1;
-
-                    if ((t1 >= 0) && (t1 <= seglen))
-                    {
-                        double rng = sqrt((xr * xr) + (yr * yr));
-                        if (rng < rmin)
-                        {
-                            rmin = rng;
-                        }
-                    }
-                }
-                else
-                {
-                }
-#endif
             }
 
             rvec.push_back(rmin);
         }
     }
 
+
+    void FakeLidar::run_scan2(std::vector<double>& rvec)
+    {
+        // use cv::CHAIN_APPROX_SIMPLE
+        rvec.clear();
+        size_t sz = contours[0].size();
+
+        // check all scan directions
+        for (const auto& r : scan_cos_sin)
+        {
+            double rmin = 10000.0;
+
+            // check all contour segments
+            for (size_t nn = 0; nn < sz; nn++)
+            {
+                cv::Point pt0 = contours[0][nn];
+                cv::Point pt1 = contours[0][(nn + 1) % sz];
+
+                // solve parametric system where rays from pt0 and pt1 intersect
+                //
+                // a1 + (dx1 * t1) = (dx0 * t0) + a0   equ #1
+                // b1 + (dy1 * t1) = (dy0 * t0) + b0   equ #2
+                //
+                // t1 = ((dx0 * t0) + a0 - a1) / dx1   equ #3
+                // t1 = ((dy0 * t0) + b0 - b1) / dy1   equ #4
+
+                // substitute #3 into #2  (|dx1| > 0)
+                //
+                // b1 - b0 + (dy1 * (((dx0 * t0) + a0 - a1) / dx1)) = (dy0 * t0)
+                // dx1*(b1 - b0) + (dy1 * (dx0 * t0)) + dy1*(a0 - a1) = (dy0 * t0)*dx1
+                // dx1*(b1 - b0) + (dy1 * (a0 - a1)) = (dy0 * t0)*dx1 - (dy1 * ((dx0 * t0))
+
+                // substitute #4 into #1  (|dy1| > 0)
+                //
+                // a1 - a0 + (dx1 * (((dy0 * t0) + b0 - b1) / dy1)) = (dx0 * t0)
+                // dy1*(a1 - a0) + (dx1 * (dy0 * t0)) + dx1*(b0 - b1) = (dx0 * t0)*dy1
+                // dy1*(a1 - a0) + (dx1 * (b0 - b1)) = (dx0 * t0)*dy1 - (dx1 * ((dy0 * t0))
+
+                // determine length of current segment
+                // and unit vector from start point of segment
+                double dx1 = pt1.x - pt0.x;
+                double dy1 = pt1.y - pt0.y;
+                double seglen = sqrt((dx1 * dx1) + (dy1 * dy1));
+                dx1 = dx1 / seglen;
+                dy1 = dy1 / seglen;
+
+                double a1 = pt0.x;
+                double b1 = pt0.y;
+
+                // get unit vector and start point for scan
+                double dx0 = r.x;
+                double dy0 = r.y;
+                double a0 = pos.x;
+                double b0 = pos.y;
+
+                double t0;
+                double t1;
+                
+                // determine which solution to use to prevent divide-by-zero
+                // solve for t0 and then substitute t0 back into equation to get t1
+
+                if (abs(dx1) > 1e-6)
+                {
+                    t0 = ((dx1 * (b1 - b0)) + (dy1 * (a0 - a1))) / ((dx1 * dy0) - (dx0 * dy1));
+                    t1 = ((dx0 * t0) + a0 - a1) / dx1;
+                }
+                else if (abs(dy1) > 1e-6)
+                {
+                    t0 = ((dy1 * (a1 - a0)) + (dx1 * (b0 - b1))) / ((dx0 * dy1) - (dx1 * dy0));
+                    t1 = ((dy0 * t0) + b0 - b1) / dy1;
+                }
+
+                double xr = (t0 * r.x);
+                double yr = (t0 * r.y);
+
+#if 0
+                // after solving for t0 and t0
+                // (x0, y0) should equal (x1, y1)
+                double x0 = xr + a0;
+                double y0 = yr + b0;
+                double x1 = (t1 * dx1) + a1;
+                double y1 = (t1 * dy1) + b1;
+#endif
+
+                // solution must have non-negative t0 and t1 terms
+                // and the length of t1 must be withing segment length
+                if ((t0 >= 0) && (t1 >= 0) && (t1 <= seglen))
+                {
+                    double rng = sqrt((xr * xr) + (yr * yr));
+                    if (rng < rmin)
+                    {
+                        rmin = rng;
+                    }
+                }
+            }
+
+            rvec.push_back(rmin);
+        }
+
+        // add noise (+-0.2cm)
+        for (auto& r : rvec)
+        {
+            double noise = randu<double>();
+            r += 0.4 * (noise - 0.5);
+        }
+    }
 }
