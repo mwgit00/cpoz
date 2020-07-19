@@ -30,121 +30,86 @@ namespace cpoz
 {
     using namespace cv;
     
-    FakeLidar::FakeLidar()
+    
+    FakeLidar::FakeLidar() :
+        jitter_range_cm_u(0.2),
+        jitter_angle_deg_u(0.25),
+        jitter_sync_deg_u(0.25)
     {
 
     }
 
+    
     FakeLidar::~FakeLidar()
     {
 
     }
 
+    
     void FakeLidar::load_floorplan(const std::string& rspath)
     {
-        // "inside" pixels are black or gray
+        // room should be a solid blob
+        // "inside" pixels are black or gray, background is white
         img_floorplan = imread(rspath, IMREAD_GRAYSCALE);
         Mat img_test = Mat(img_floorplan.size(), CV_8U);
         Mat img_binary = (img_floorplan < 240);
+
+        // extract contours of room
+        // use "simple" approximation to encode long straight segments as two points
         findContours(img_binary, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-        drawContours(img_test, contours, 0, 128, 1);
-        imwrite("crud.png", img_test);
-    }
-
-    void FakeLidar::init_scan_angs(const double deg0, const double deg1, const double step)
-    {
-        double ang = deg0;
-        while (ang < (deg1 - 1e-6))
-        {
-            double ang_rad = ang * CV_PI / 180.0;
-            scan_angs.push_back(ang);
-            scan_cos_sin.push_back(cv::Point2d(cos(ang_rad), sin(ang_rad)));
-            ang += step;
-        }
-    }
-
-    void FakeLidar::draw_scan(cv::Mat& rimg, const std::vector<double>& rvec)
-    {
-        if (rvec.size() == scan_cos_sin.size())
-        {
-            img_floorplan.copyTo(rimg);
-            for (size_t nn = 0; nn < rvec.size(); nn++)
-            {
-                double mag = rvec[nn];
-                int dx = static_cast<int>(scan_cos_sin[nn].x * mag);
-                int dy = static_cast<int>(scan_cos_sin[nn].y * mag);
-                line(rimg, pos, { pos.x + dx, pos.y + dy }, 32);
-                circle(rimg, { pos.x + dx, pos.y + dy }, 3, 64, -1);
-            }
-        }
-    }
-
-    void FakeLidar::run_scan(std::vector<double>& rvec)
-    {
-        // use cv::CHAIN_APPROX_NONE
-        rvec.clear();
-        size_t sz = contours[0].size();
-
-        std::vector<double> vecr;
-        vecr.resize(sz);
         
-        // precompute distance from sensing point to all contour points
-        for (size_t nn = 0; nn < sz; nn++)
+        // generate test image
+        drawContours(img_test, contours, 0, 128, 1);
+        imwrite("zzfloorplan.png", img_test);
+    }
+
+
+    void FakeLidar::draw_last_scan(cv::Mat& rimg) const
+    {
+        img_floorplan.copyTo(rimg);
+        for (size_t nn = 0; nn < last_scan.size(); nn++)
         {
-            cv::Point pt0 = contours[0][nn];
-            double qdx = pt0.x - pos.x;
-            double qdy = pt0.y - pos.y;
-            double rng = sqrt((qdx * qdx) + (qdy * qdy));
-            vecr[nn] = rng;
-        }
+            double mag = last_scan[nn];
+            int dx = static_cast<int>(jitter_cos_sin[nn].x * mag);
+            int dy = static_cast<int>(jitter_cos_sin[nn].y * mag);
 
-        // check all scan directions
-        for (const auto& r : scan_cos_sin)
-        {
-            double rmin = 10000.0;
-
-            // check all contour points
-            for (size_t nn = 0; nn < sz; nn++)
-            {
-                cv::Point pt0 = contours[0][nn];
-                double rng = vecr[nn];
-
-                // project sensor direction ray
-                // magnitude is distance to contour point
-                double qx = pos.x + (rng * r.x);
-                double qy = pos.y + (rng * r.y);
-                double qdx = qx - pt0.x;
-                double qdy = qy - pt0.y;
-
-                // see how close that projected point is to contour point
-                double qrpts = sqrt((qdx * qdx) + (qdy * qdy));
-                if (qrpts < sqrt(2.0) / 2.0)
-                {
-                    // possible match
-                    if (rng < rmin)
-                    {
-                        rmin = rng;
-                    }
-                }
-            }
-
-            rvec.push_back(rmin);
+            // draw ray from real-world position
+            // use noisy measurements for angle and length of ray
+            line(rimg, pos, { pos.x + dx, pos.y + dy }, 32);
+            circle(rimg, { pos.x + dx, pos.y + dy }, 3, 64, -1);
         }
     }
 
 
-    void FakeLidar::run_scan2(std::vector<double>& rvec)
+    void FakeLidar::run_scan(void)
     {
-        // use cv::CHAIN_APPROX_SIMPLE
-        rvec.clear();
-        size_t sz = contours[0].size();
+        const size_t sz = contours[0].size();
 
-        // check all scan directions
-        for (const auto& r : scan_cos_sin)
+        // flush previous results
+        last_scan.clear();
+        jitter_cos_sin.clear();
+        
+        // create jitter in angular sync (one offset applied to all angles)
+        double noise = randu<double>();
+        double sync_jitter = jitter_sync_deg_u * 2.0 * (noise - 0.5);
+
+        // create jitter in individual measurement angles
+        for (const auto& rdeg : scan_angs)
+        {
+            double noise = randu<double>();
+            double ang_with_jitter = rdeg + jitter_angle_deg_u * 2.0 * (noise - 0.5);
+            ang_with_jitter += sync_jitter;
+            double ang_rad = ang_with_jitter * CV_PI / 180.0;
+            jitter_cos_sin.push_back(cv::Point2d(cos(ang_rad), sin(ang_rad)));
+        }
+
+        // loop through all measurement angles
+        for (const auto& r : jitter_cos_sin)
         {
             double rmin = 10000.0;
 
-            // check all contour segments
+            // check for intersection with all contour line segments
+            // wraparound at end of array to get points for final segment
             for (size_t nn = 0; nn < sz; nn++)
             {
                 cv::Point pt0 = contours[0][nn];
@@ -210,6 +175,7 @@ namespace cpoz
 #if 0
                 // after solving for t0 and t0
                 // (x0, y0) should equal (x1, y1)
+                // that can be tested here
                 double x0 = xr + a0;
                 double y0 = yr + b0;
                 double x1 = (t1 * dx1) + a1;
@@ -218,6 +184,7 @@ namespace cpoz
 
                 // solution must have non-negative t0 and t1 terms
                 // and the length of t1 must be withing segment length
+                // whichever solution is closest (min range) will be the measurement
                 if ((t0 >= 0) && (t1 >= 0) && (t1 <= seglen))
                 {
                     double rng = sqrt((xr * xr) + (yr * yr));
@@ -228,14 +195,14 @@ namespace cpoz
                 }
             }
 
-            rvec.push_back(rmin);
+            last_scan.push_back(rmin);
         }
 
-        // add noise (+-0.2cm)
-        for (auto& r : rvec)
+        // add measurement jitter
+        for (auto& r : last_scan)
         {
             double noise = randu<double>();
-            r += 0.4 * (noise - 0.5);
+            r += jitter_range_cm_u * 2.0 * (noise - 0.5);
         }
     }
 }
