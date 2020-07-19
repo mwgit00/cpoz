@@ -38,7 +38,10 @@
 #include "BGRLandmark.h"
 #include "CameraHelper.h"
 #include "XYZLandmark.h"
+
 #include "FakeLidar.h"
+#include "GHSLAM.h"
+#include "GradientMatcher.h"
 
 using namespace cv;
 
@@ -338,24 +341,100 @@ int main()
 {
     std::cout << stitle << std::endl;
     //cpoz::CameraHelper cam;
+    cpoz::GHSLAM ghslam;
     cpoz::FakeLidar lidar;
+    ghalgo::GradientMatcher gm;
     //cam.cal(".\\calib_02");
     //test_room1();
     //test_room2();
     //loop();
 
+    Size matchsz;
+    gm.init(1, 7, 0.2, 90.0);
+
     // 8000 samples/s, 2Hz-10Hz ???
-    lidar.init_scan_angs(0.0, 360.0, 1.0);
+    ghslam.init_scan_angs(0.0, 360.0, 4.0);
+
+#if 1
+    lidar.jitter_angle_deg_u = 0.5;// 1.0;
+    lidar.jitter_range_cm_u = 4.0;// 4.0;
+    lidar.jitter_sync_deg_u = 0.5;// 1.0;
+#endif
+    lidar.set_scan_angs(ghslam.get_scan_angs());
+    
     lidar.load_floorplan(".\\docs\\apt_1cmpp.png");
 
-    lidar.set_pos({ 400, 400 });
-    lidar.set_pos({ 525, 185 });
-    //lidar.set_pos({ 450, 670 });
-    //lidar.set_pos({ 52, 420 });
-    Mat ifoo;
-    std::vector<double> vscan;
-    lidar.run_scan2(vscan);
-    lidar.draw_scan(ifoo, vscan);
-    imwrite("chud.png", ifoo);
+    Point ptworld = { 400, 400 };
+    Point pt0_scan;
+    
+    Point tpt0_scan;
+    Point tpt0_offset;
+    Point tpt0_mid;
+    
+    Point tptq_scan;
+    Point tptq_offset;
+    Point tptq_mid;
+    
+    Size tsz0;
 
+    for (int i = 0; i < 5; i++)
+    {
+        Mat img_scan;
+        Mat img_room;
+        std::vector<double> vscan;
+
+        std::ostringstream oss;
+        oss << "_" << i << ".png";
+        
+        // update real position that is known only to fake LIDAR
+        Point scoot = { i * 30, i * 5 };
+        lidar.set_pos(ptworld + scoot);
+
+        // get a scan from LIDAR and convert to 2D blob image
+        lidar.run_scan();
+        ghslam.scan_to_img(img_scan, pt0_scan, 3, lidar.get_last_scan());
+
+        if (i == 0)
+        {
+            gm.init_ghough_table_from_img(img_scan);
+            tpt0_scan = pt0_scan;
+            tpt0_mid = (img_scan.size() / 2);
+            tpt0_offset = tpt0_scan - tpt0_mid;
+        }
+        else
+        {
+            Mat igrad;
+            Mat imatch;
+            double qmax;
+            Point ptmax;
+            Point ptmax_offset;
+
+            tptq_scan = pt0_scan;
+            tptq_mid = (img_scan.size() / 2);
+            tptq_offset = tptq_scan - tptq_mid;
+
+            Point fud = (img_scan.size() / 2);
+
+            gm.apply_ghough(img_scan, igrad, imatch);
+            minMaxLoc(imatch, nullptr, &qmax, nullptr, &ptmax);
+
+            Mat igradn;
+            Mat imatchn;
+            normalize(igrad, igradn, 0, 255, NORM_MINMAX);
+            normalize(imatch, imatchn, 0, 65535, NORM_MINMAX);
+            imwrite("zzghg" + oss.str(), igradn);
+            imwrite("zzghm" + oss.str(), imatchn);
+
+            ptmax_offset = ptmax - tptq_mid;
+            Point slam_offset = tptq_offset - tpt0_offset - ptmax_offset;
+        }
+
+        lidar.draw_last_scan(img_room);
+        imwrite("zzroom" + oss.str(), img_room);
+
+        // note scan point and image center point
+        circle(img_scan, pt0_scan, 3, 0, -1);
+        circle(img_scan, { img_scan.size().width / 2, img_scan.size().height / 2 }, 3, 128, -1);
+        imwrite("zzscan" + oss.str(), img_scan);
+    }
 }

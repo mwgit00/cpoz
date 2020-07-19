@@ -32,6 +32,7 @@ namespace cpoz
     
     
     FakeLidar::FakeLidar() :
+        range_dec_pt_adjust(1),
         jitter_range_cm_u(0.2),
         jitter_angle_deg_u(0.25),
         jitter_sync_deg_u(0.25)
@@ -199,10 +200,14 @@ namespace cpoz
         }
 
         // add measurement jitter
+        // and apply digits-after-decimal-point adjustment
         for (auto& r : last_scan)
         {
             double noise = randu<double>();
-            r += jitter_range_cm_u * 2.0 * (noise - 0.5);
+            double rnoisy = r + jitter_range_cm_u * 2.0 * (noise - 0.5);
+            int inew = static_cast<int>((rnoisy * range_dec_pt_adjust) + 0.5);
+            double rnew = static_cast<double>(inew) / range_dec_pt_adjust;
+            r = rnew;
         }
     }
 }

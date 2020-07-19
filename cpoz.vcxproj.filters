@@ -39,6 +39,12 @@
     <ClCompile Include="FakeLidar.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="GHSLAM.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GradientMatcher.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="room1.h">
@@ -60,6 +66,15 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="FakeLidar.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GHSLAM.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ghbase.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GradientMatcher.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

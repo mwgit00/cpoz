@@ -36,13 +36,16 @@ namespace cpoz
         void init_scan_angs(
             const double deg0,
             const double deg1,
-            const double step);
+            const double step,
+            const double offset_step = 1.0,
+            const size_t offset_ct = 7);
 
         const std::vector<double>& get_scan_angs(void) const;
 
         void scan_to_img(
             cv::Mat& rimg,
             cv::Point& rpt0,
+            const size_t offset_index,
             const std::vector<double>& rscan);
 
     private:
@@ -50,7 +53,8 @@ namespace cpoz
         double ang;     ///< calculated heading
         
         std::vector<double> scan_angs;          ///< ideal scan angles
-        std::vector<cv::Point2d> scan_cos_sin;  ///< ideal cos and sin for scan angles
+        std::vector<double> scan_angs_offsets;  ///< offsets for angle search
+        std::vector<std::vector<cv::Point2d>> scan_cos_sin; ///< ideal cos and sin for scan angles
     };
 }
 

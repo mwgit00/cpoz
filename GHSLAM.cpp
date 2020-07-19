@@ -49,17 +49,39 @@ namespace cpoz
     void GHSLAM::init_scan_angs(
         const double deg0,
         const double deg1,
-        const double step)
+        const double degstep,
+        const double offset_step,
+        const size_t offset_ct)
     {
-        double ang = deg0;
+        // flush old data
         scan_angs.clear();
+        scan_angs_offsets.clear();
         scan_cos_sin.clear();
+
+        // generate ideal scan angles
+        double ang = deg0;
+        std::vector<Point2d> vcs;
         while (ang < (deg1 - 1e-6))
         {
-            double ang_rad = ang * CV_PI / 180.0;
             scan_angs.push_back(ang);
-            scan_cos_sin.push_back(cv::Point2d(cos(ang_rad), sin(ang_rad)));
-            ang += step;
+            ang += degstep;
+        }
+
+        // generate lookup tables for cosine and sine
+        // for a range of offsets from ideal scan angles
+        double ang_offset = -offset_step * (offset_ct / 2);
+        for (size_t nn = 0; nn < offset_ct; nn++)
+        {
+            scan_angs_offsets.push_back(ang_offset);
+            scan_cos_sin.push_back({});
+            
+            for (const auto& rang : scan_angs)
+            {
+                double ang_rad = (rang + ang_offset) * CV_PI / 180.0;
+                scan_cos_sin.back().push_back(cv::Point2d(cos(ang_rad), sin(ang_rad)));
+            }
+
+            ang_offset += offset_step;
         }
     }
 
@@ -68,15 +90,18 @@ namespace cpoz
         return scan_angs;
     }
 
-    
+
     void GHSLAM::scan_to_img(
         cv::Mat& rimg,
         cv::Point& rpt0,
+        const size_t offset_index,
         const std::vector<double>& rscan)
     {
-        const int pad = 7;
+        const int PAD_BORDER = 7;
 
-        if (rscan.size() == scan_cos_sin.size())
+        std::vector<Point2d>& rcs = scan_cos_sin[offset_index];
+
+        if (rscan.size() == rcs.size())
         {
             std::vector<Point> pts;
             pts.resize(rscan.size());
@@ -85,7 +110,7 @@ namespace cpoz
             int maxy = 0;
             for (size_t nn = 0; nn < rscan.size(); nn++)
             {
-                Point2d& rpt2d = scan_cos_sin[nn];
+                Point2d& rpt2d = scan_cos_sin[offset_index][nn];
                 double mag = rscan[nn];
                 int dx = static_cast<int>(rpt2d.x * mag);
                 int dy = static_cast<int>(rpt2d.y * mag);
@@ -94,7 +119,7 @@ namespace cpoz
                 pts[nn] = { dx, dy };
             }
             
-#if 1
+#if 0
             int padx = maxx + pad;
             int pady = maxy + pad;
             int w = padx * 2;
@@ -109,26 +134,25 @@ namespace cpoz
             }
 #else
             Rect r = boundingRect(pts);
-            rimg.create(Size(r.width + 2 * pad, r.height + 2 * pad), CV_8UC1);
+            rimg = Mat::zeros(Size(r.width + (2 * PAD_BORDER), r.height + (2 * PAD_BORDER)), CV_8UC1);
             for (size_t nn = 0; nn < rscan.size(); nn++)
             {
-                Point ptnew = { pts[nn].x - r.x + pad, pts[nn].y - r.y + pad };
+                Point ptnew = { pts[nn].x - r.x + PAD_BORDER, pts[nn].y - r.y + PAD_BORDER };
                 pts[nn] = ptnew;
             }
 #endif
 
             // get points into a contour data structure
+            // and then draw them into the image
             std::vector<std::vector<Point>> cc;
             cc.push_back(pts);
-            drawContours(rimg, cc, 0, 0, -1);
+            drawContours(rimg, cc, 0, 255, cv::FILLED, cv::LINE_AA);
 
             // note sensing point
-#if 1
+#if 0
             rpt0 = { padx, pady };
-            circle(rimg, rpt0, 3, 255, -1);
 #else
-            rpt0 = { -r.x + pad, -r.y + pad };
-            circle(rimg, rpt0, 3, 255, -1);
+            rpt0 = { 0 - r.x + PAD_BORDER, 0 - r.y + PAD_BORDER };
 #endif
         }
     }

@@ -160,6 +160,8 @@
     <ClCompile Include="BGRLandmark.cpp" />
     <ClCompile Include="cpoz.cpp" />
     <ClCompile Include="FakeLidar.cpp" />
+    <ClCompile Include="GHSLAM.cpp" />
+    <ClCompile Include="GradientMatcher.cpp" />
     <ClCompile Include="room1.cpp" />
     <ClCompile Include="CameraHelper.cpp" />
     <ClCompile Include="room2.cpp" />
@@ -170,6 +172,9 @@
     <ClInclude Include="BGRLandmark.h" />
     <ClInclude Include="CameraHelper.h" />
     <ClInclude Include="FakeLidar.h" />
+    <ClInclude Include="ghbase.h" />
+    <ClInclude Include="GHSLAM.h" />
+    <ClInclude Include="GradientMatcher.h" />
     <ClInclude Include="room1.h" />
     <ClInclude Include="room2.h" />
     <ClInclude Include="room_test.h" />
