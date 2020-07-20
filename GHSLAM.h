@@ -44,6 +44,7 @@ namespace cpoz
 
         void scan_to_img(
             cv::Mat& rimg,
+            cv::Mat& rimgmask,
             cv::Point& rpt0,
             const size_t offset_index,
             const std::vector<double>& rscan);

@@ -350,7 +350,7 @@ int main()
     //loop();
 
     Size matchsz;
-    gm.init(1, 7, 0.2, 90.0);
+    gm.init(1, 7, 0.5, 8.0);
 
     // 8000 samples/s, 2Hz-10Hz ???
     ghslam.init_scan_angs(0.0, 360.0, 4.0);
@@ -381,6 +381,7 @@ int main()
     {
         Mat img_scan;
         Mat img_room;
+        Mat img_mask;
         std::vector<double> vscan;
 
         std::ostringstream oss;
@@ -392,7 +393,7 @@ int main()
 
         // get a scan from LIDAR and convert to 2D blob image
         lidar.run_scan();
-        ghslam.scan_to_img(img_scan, pt0_scan, 3, lidar.get_last_scan());
+        ghslam.scan_to_img(img_scan, img_mask, pt0_scan, 3, lidar.get_last_scan());
 
         if (i == 0)
         {
@@ -401,7 +402,7 @@ int main()
             tpt0_mid = (img_scan.size() / 2);
             tpt0_offset = tpt0_scan - tpt0_mid;
         }
-        else
+        
         {
             Mat igrad;
             Mat imatch;
@@ -415,7 +416,11 @@ int main()
 
             Point fud = (img_scan.size() / 2);
 
-            gm.apply_ghough(img_scan, igrad, imatch);
+            //gm.apply_ghough(img_scan, igrad, imatch);
+            gm.create_masked_gradient_orientation_img(img_scan, igrad);
+            igrad = igrad & img_mask;
+            ghalgo::apply_ghough_transform_allpix<uint8_t, CV_16U, uint16_t>(igrad, imatch, gm.m_ghtable, 1);
+
             minMaxLoc(imatch, nullptr, &qmax, nullptr, &ptmax);
 
             Mat igradn;
@@ -436,5 +441,6 @@ int main()
         circle(img_scan, pt0_scan, 3, 0, -1);
         circle(img_scan, { img_scan.size().width / 2, img_scan.size().height / 2 }, 3, 128, -1);
         imwrite("zzscan" + oss.str(), img_scan);
+        imwrite("zzmask" + oss.str(), img_mask);
     }
 }

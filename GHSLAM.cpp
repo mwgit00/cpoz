@@ -93,12 +93,14 @@ namespace cpoz
 
     void GHSLAM::scan_to_img(
         cv::Mat& rimg,
+        cv::Mat& rimgmask,
         cv::Point& rpt0,
         const size_t offset_index,
         const std::vector<double>& rscan)
     {
         const int PAD_BORDER = 7;
 
+        // @FIXME -- sanity check this index
         std::vector<Point2d>& rcs = scan_cos_sin[offset_index];
 
         if (rscan.size() == rcs.size())
@@ -106,54 +108,53 @@ namespace cpoz
             std::vector<Point> pts;
             pts.resize(rscan.size());
 
-            int maxx = 0;
-            int maxy = 0;
+            // project all measurements using ideal measurement angles
             for (size_t nn = 0; nn < rscan.size(); nn++)
             {
                 Point2d& rpt2d = scan_cos_sin[offset_index][nn];
                 double mag = rscan[nn];
                 int dx = static_cast<int>(rpt2d.x * mag);
                 int dy = static_cast<int>(rpt2d.y * mag);
-                maxx = max(abs(dx), maxx);
-                maxy = max(abs(dy), maxy);
                 pts[nn] = { dx, dy };
             }
             
-#if 0
-            int padx = maxx + pad;
-            int pady = maxy + pad;
-            int w = padx * 2;
-            int h = pady * 2;
-            rimg.create(Size(w, h), CV_8UC1);
-
-            // offset points so they all radiate from center of image
-            for (size_t nn = 0; nn < rscan.size(); nn++)
-            {
-                Point ptnew = { pts[nn].x + padx, pts[nn].y + pady };
-                pts[nn] = ptnew;
-            }
-#else
+            // get bounding box around measurement points
+            // create image same size as bounding box along with some padding
+            // shift points so they will be centered in image
             Rect r = boundingRect(pts);
-            rimg = Mat::zeros(Size(r.width + (2 * PAD_BORDER), r.height + (2 * PAD_BORDER)), CV_8UC1);
-            for (size_t nn = 0; nn < rscan.size(); nn++)
+            Size imgsz = Size(r.width + (2 * PAD_BORDER), r.height + (2 * PAD_BORDER));
+            rimg = Mat::zeros(imgsz, CV_8UC1);
+            for (size_t nn = 0; nn < pts.size(); nn++)
             {
                 Point ptnew = { pts[nn].x - r.x + PAD_BORDER, pts[nn].y - r.y + PAD_BORDER };
                 pts[nn] = ptnew;
             }
-#endif
 
-            // get points into a contour data structure
+            // put points into a contour data structure
             // and then draw them into the image
             std::vector<std::vector<Point>> cc;
             cc.push_back(pts);
-            drawContours(rimg, cc, 0, 255, cv::FILLED, cv::LINE_AA);
+            drawContours(rimg, cc, 0, 255, cv::FILLED);
 
-            // note sensing point
-#if 0
-            rpt0 = { padx, pady };
-#else
+            // draw lines between points but filter out any that are too long
+            // this creates a mask that will eliminate lots of useless contour points
+            // threshold = (max LIDAR range * tan(angle between measurements))
+            double len_thr = 1200 * tan(4 * CV_PI / 180);
+            rimgmask = Mat::zeros(imgsz, CV_8UC1);
+            for (size_t nn = 0; nn < pts.size(); nn++)
+            {
+                Point pt0 = pts[nn];
+                Point pt1 = pts[(nn + 1) % pts.size()];
+                Point ptdiff = pt0 - pt1;
+                double r = sqrt(ptdiff.x * ptdiff.x + ptdiff.y * ptdiff.y);
+                if (r < len_thr)
+                {
+                    line(rimgmask, pt0, pt1, 255, 7);
+                }
+            }
+
+            // finally note the sensing point in the scan image
             rpt0 = { 0 - r.x + PAD_BORDER, 0 - r.y + PAD_BORDER };
-#endif
         }
     }
 }
