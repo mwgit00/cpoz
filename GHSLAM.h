@@ -24,6 +24,7 @@
 #define GHSLAM_H_
 
 #include <vector>
+#include "GradientMatcher.h"
 
 namespace cpoz
 {
@@ -37,8 +38,8 @@ namespace cpoz
             const double deg0,
             const double deg1,
             const double step,
-            const double offset_step = 1.0,
-            const size_t offset_ct = 7);
+            const double offset_step,
+            const size_t offset_ct);
 
         const std::vector<double>& get_scan_angs(void) const;
 
@@ -49,13 +50,22 @@ namespace cpoz
             const size_t offset_index,
             const std::vector<double>& rscan);
 
+        void update_scan_templates(const std::vector<double>& rscan);
+
+        void perform_match(const cv::Point& rpt0, const cv::Mat& rin);
+
+
     private:
         cv::Point loc;  ///< calculated position
         double ang;     ///< calculated heading
+
+        double mscale;
         
         std::vector<double> scan_angs;          ///< ideal scan angles
         std::vector<double> scan_angs_offsets;  ///< offsets for angle search
         std::vector<std::vector<cv::Point2d>> scan_cos_sin; ///< ideal cos and sin for scan angles
+
+        std::vector<ghalgo::GradientMatcher> gmarr;
     };
 }
 

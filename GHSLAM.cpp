@@ -33,12 +33,24 @@ namespace cpoz
 {
     using namespace cv;
 
+    constexpr size_t GMARR_SZ = 15;
+
+    
     GHSLAM::GHSLAM() :
         loc({ 0, 0}),
-        ang(0.0)
+        ang(0.0),
+        mscale(0.5)
     {
+        gmarr.resize(GMARR_SZ);
+        for (auto& rgm : gmarr)
+        {
+            rgm.init(1, 7, 0.5, 8.0);
+        }
 
+        // 8000 samples/s, 2Hz-10Hz ???
+        init_scan_angs(0.0, 360.0, 4.0, 1.0, GMARR_SZ);
     }
+    
     
     GHSLAM::~GHSLAM()
     {
@@ -85,6 +97,7 @@ namespace cpoz
         }
     }
 
+    
     const std::vector<double>& GHSLAM::get_scan_angs(void) const
     {
         return scan_angs;
@@ -112,7 +125,7 @@ namespace cpoz
             for (size_t nn = 0; nn < rscan.size(); nn++)
             {
                 Point2d& rpt2d = scan_cos_sin[offset_index][nn];
-                double mag = rscan[nn];
+                double mag = rscan[nn] * mscale;
                 int dx = static_cast<int>(rpt2d.x * mag);
                 int dy = static_cast<int>(rpt2d.y * mag);
                 pts[nn] = { dx, dy };
@@ -131,15 +144,16 @@ namespace cpoz
             }
 
             // put points into a contour data structure
-            // and then draw them into the image
+            // and then draw them into the image as filled blob with anti-aliased lines
             std::vector<std::vector<Point>> cc;
             cc.push_back(pts);
-            drawContours(rimg, cc, 0, 255, cv::FILLED);
+            drawContours(rimg, cc, 0, 255, cv::FILLED, cv::LINE_AA);
 
+            // generate a mask image
             // draw lines between points but filter out any that are too long
             // this creates a mask that will eliminate lots of useless contour points
             // threshold = (max LIDAR range * tan(angle between measurements))
-            double len_thr = 1200 * tan(4 * CV_PI / 180);
+            double len_thr = 1200 * mscale * tan(4 * CV_PI / 180);
             rimgmask = Mat::zeros(imgsz, CV_8UC1);
             for (size_t nn = 0; nn < pts.size(); nn++)
             {
@@ -153,8 +167,75 @@ namespace cpoz
                 }
             }
 
+            // pre-blur prior to matching (optional)
+            GaussianBlur(rimg, rimg, { 3, 3 }, 0.0, 0.0);
+
             // finally note the sensing point in the scan image
             rpt0 = { 0 - r.x + PAD_BORDER, 0 - r.y + PAD_BORDER };
+        }
+    }
+
+
+    void GHSLAM::update_scan_templates(const std::vector<double>& rscan)
+    {
+        const size_t sz = gmarr.size();
+        for (size_t ii = 0; ii < sz; ii++)
+        {
+            Mat img_scan;
+            Mat img_mask;
+            Mat img_grad;
+
+            Point pt0;
+            scan_to_img(img_scan, img_mask, pt0, ii, rscan);
+            
+            gmarr[ii].create_masked_gradient_orientation_img(img_scan, img_grad);
+            img_grad = img_grad & img_mask;
+
+            ghalgo::create_lookup_table(
+                img_grad,
+                static_cast<uint8_t>(gmarr[ii].m_angstep + 1.0), gmarr[ii].m_ghtable);
+
+#if 0
+            tpt0_scan = pt0_scan;
+            tpt0_mid = (img_scan.size() / 2);
+            tpt0_offset = tpt0_scan - tpt0_mid;
+#endif
+        }
+    }
+
+
+    void GHSLAM::perform_match(const cv::Point& rpt0, const cv::Mat& rin)
+    {
+        const size_t sz = gmarr.size();
+
+        Mat img_grad;
+
+        Point tptq_scan = rpt0;
+        Point tptq_mid = (rin.size() / 2);
+        Point tptq_offset = tptq_scan - tptq_mid;
+
+        // they are all identical
+        gmarr[0].create_masked_gradient_orientation_img(rin, img_grad);
+
+        // search for best orientation match
+        // this match will also provide the translation
+        size_t qidmax = 0;
+        double qallmax = 0.0;
+        for (size_t ii = 0; ii < sz; ii++)
+        {
+            Mat img_match;
+            double qmax;
+            Point qptmax;
+
+            ghalgo::apply_ghough_transform_allpix<uint8_t, CV_16U, uint16_t>(
+                img_grad, img_match, gmarr[ii].m_ghtable, 1);
+            minMaxLoc(img_match, nullptr, &qmax, nullptr, &qptmax);
+
+            if (qmax > qallmax)
+            {
+                qallmax = qmax;
+                qidmax = ii;
+            }
         }
     }
 }

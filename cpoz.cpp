@@ -352,16 +352,12 @@ int main()
     Size matchsz;
     gm.init(1, 7, 0.5, 8.0);
 
-    // 8000 samples/s, 2Hz-10Hz ???
-    ghslam.init_scan_angs(0.0, 360.0, 4.0);
-
 #if 1
     lidar.jitter_angle_deg_u = 0.5;// 1.0;
     lidar.jitter_range_cm_u = 4.0;// 4.0;
     lidar.jitter_sync_deg_u = 0.5;// 1.0;
 #endif
     lidar.set_scan_angs(ghslam.get_scan_angs());
-    
     lidar.load_floorplan(".\\docs\\apt_1cmpp.png");
 
     Point ptworld = { 400, 400 };
@@ -393,10 +389,11 @@ int main()
 
         // get a scan from LIDAR and convert to 2D blob image
         lidar.run_scan();
-        ghslam.scan_to_img(img_scan, img_mask, pt0_scan, 3, lidar.get_last_scan());
+        ghslam.scan_to_img(img_scan, img_mask, pt0_scan, 7, lidar.get_last_scan());
 
         if (i == 0)
         {
+            ghslam.update_scan_templates(lidar.get_last_scan());
             gm.init_ghough_table_from_img(img_scan);
             tpt0_scan = pt0_scan;
             tpt0_mid = (img_scan.size() / 2);
@@ -416,6 +413,7 @@ int main()
 
             Point fud = (img_scan.size() / 2);
 
+            ghslam.perform_match(pt0_scan, img_scan);
             //gm.apply_ghough(img_scan, igrad, imatch);
             gm.create_masked_gradient_orientation_img(img_scan, igrad);
             igrad = igrad & img_mask;
