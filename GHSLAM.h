@@ -52,12 +52,15 @@ namespace cpoz
 
         void update_scan_templates(const std::vector<double>& rscan);
 
-        void perform_match(const cv::Point& rpt0, const cv::Mat& rin);
+        void perform_match(
+            const std::vector<double>& rscan,
+            cv::Point& roffset,
+            double& rang);
 
 
     private:
-        cv::Point loc;  ///< calculated position
-        double ang;     ///< calculated heading
+        cv::Point slam_loc;  ///< calculated position
+        double slam_ang;     ///< calculated heading
 
         double mscale;
         
@@ -66,6 +69,7 @@ namespace cpoz
         std::vector<std::vector<cv::Point2d>> scan_cos_sin; ///< ideal cos and sin for scan angles
 
         std::vector<ghalgo::GradientMatcher> gmarr;
+        std::vector<cv::Point> tpt0_offset;
     };
 }
 

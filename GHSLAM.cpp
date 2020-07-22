@@ -33,28 +33,34 @@ namespace cpoz
 {
     using namespace cv;
 
-    constexpr size_t GMARR_SZ = 15;
+    constexpr int PAD_BORDER = 31;              // big enough so rotation doesn't chop off pixels
+    constexpr size_t GMARR_SZ = 31;             // big enough to provided enough angle resolution
+    constexpr double ANG_STEP_SEARCH = 1.0;    // degrees
+    constexpr double ANG_STEP_LIDAR = 4.0;      // degrees
+    constexpr double MAX_RNG_LIDAR = 1200.0;    // 12m
 
     
     GHSLAM::GHSLAM() :
-        loc({ 0, 0}),
-        ang(0.0),
-        mscale(0.5)
+        slam_loc({ 0, 0}),
+        slam_ang(0.0),
+        mscale(0.125)
     {
         gmarr.resize(GMARR_SZ);
+        tpt0_offset.resize(GMARR_SZ);
+
         for (auto& rgm : gmarr)
         {
-            rgm.init(1, 7, 0.5, 8.0);
+            rgm.init(1, 3, 0.2, 16.0);
         }
 
         // 8000 samples/s, 2Hz-10Hz ???
-        init_scan_angs(0.0, 360.0, 4.0, 1.0, GMARR_SZ);
+        init_scan_angs(0.0, 360.0, ANG_STEP_LIDAR, ANG_STEP_SEARCH, GMARR_SZ);
     }
     
     
     GHSLAM::~GHSLAM()
     {
-
+        // does nothing
     }
 
 
@@ -111,8 +117,6 @@ namespace cpoz
         const size_t offset_index,
         const std::vector<double>& rscan)
     {
-        const int PAD_BORDER = 7;
-
         // @FIXME -- sanity check this index
         std::vector<Point2d>& rcs = scan_cos_sin[offset_index];
 
@@ -124,7 +128,7 @@ namespace cpoz
             // project all measurements using ideal measurement angles
             for (size_t nn = 0; nn < rscan.size(); nn++)
             {
-                Point2d& rpt2d = scan_cos_sin[offset_index][nn];
+                Point2d& rpt2d = rcs[nn];
                 double mag = rscan[nn] * mscale;
                 int dx = static_cast<int>(rpt2d.x * mag);
                 int dy = static_cast<int>(rpt2d.y * mag);
@@ -144,16 +148,16 @@ namespace cpoz
             }
 
             // put points into a contour data structure
-            // and then draw them into the image as filled blob with anti-aliased lines
+            // and then draw them into the image as filled blob (with anti-aliased lines ???)
             std::vector<std::vector<Point>> cc;
             cc.push_back(pts);
-            drawContours(rimg, cc, 0, 255, cv::FILLED, cv::LINE_AA);
+            drawContours(rimg, cc, 0, 255, cv::FILLED);// , cv::LINE_AA);
 
             // generate a mask image
             // draw lines between points but filter out any that are too long
             // this creates a mask that will eliminate lots of useless contour points
-            // threshold = (max LIDAR range * tan(angle between measurements))
-            double len_thr = 1200 * mscale * tan(4 * CV_PI / 180);
+            // threshold is distance between two measurements at max range
+            double len_thr = MAX_RNG_LIDAR * mscale * tan(ANG_STEP_LIDAR * CV_PI / 180.0);
             rimgmask = Mat::zeros(imgsz, CV_8UC1);
             for (size_t nn = 0; nn < pts.size(); nn++)
             {
@@ -167,9 +171,10 @@ namespace cpoz
                 }
             }
 
+#if 0
             // pre-blur prior to matching (optional)
             GaussianBlur(rimg, rimg, { 3, 3 }, 0.0, 0.0);
-
+#endif
             // finally note the sensing point in the scan image
             rpt0 = { 0 - r.x + PAD_BORDER, 0 - r.y + PAD_BORDER };
         }
@@ -187,7 +192,7 @@ namespace cpoz
 
             Point pt0;
             scan_to_img(img_scan, img_mask, pt0, ii, rscan);
-            
+  
             gmarr[ii].create_masked_gradient_orientation_img(img_scan, img_grad);
             img_grad = img_grad & img_mask;
 
@@ -195,32 +200,40 @@ namespace cpoz
                 img_grad,
                 static_cast<uint8_t>(gmarr[ii].m_angstep + 1.0), gmarr[ii].m_ghtable);
 
-#if 0
-            tpt0_scan = pt0_scan;
-            tpt0_mid = (img_scan.size() / 2);
-            tpt0_offset = tpt0_scan - tpt0_mid;
-#endif
+            Point tpt0_mid = (img_scan.size() / 2);
+            tpt0_offset[ii] = pt0 - tpt0_mid;
         }
     }
 
 
-    void GHSLAM::perform_match(const cv::Point& rpt0, const cv::Mat& rin)
+    void GHSLAM::perform_match(
+        const std::vector<double>& rscan,
+        cv::Point& roffset,
+        double& rang)
     {
         const size_t sz = gmarr.size();
 
+        Mat img_scan;
+        Mat img_mask;
         Mat img_grad;
+        Point pt0_scan;
 
-        Point tptq_scan = rpt0;
-        Point tptq_mid = (rin.size() / 2);
-        Point tptq_offset = tptq_scan - tptq_mid;
+        // convert scan to an image (no rotation)
+        scan_to_img(img_scan, img_mask, pt0_scan, sz / 2, rscan);
 
-        // they are all identical
-        gmarr[0].create_masked_gradient_orientation_img(rin, img_grad);
+        Point tptq_mid = (img_scan.size() / 2);
+        Point tptq_offset = pt0_scan - tptq_mid;
+
+        // they are all identical so pick matcher 0
+        // to get gradient image for running match
+        gmarr[0].create_masked_gradient_orientation_img(img_scan, img_grad);
+        img_grad = img_grad & img_mask;
 
         // search for best orientation match
         // this match will also provide the translation
         size_t qidmax = 0;
         double qallmax = 0.0;
+        Point qptmax_offset;
         for (size_t ii = 0; ii < sz; ii++)
         {
             Mat img_match;
@@ -230,12 +243,17 @@ namespace cpoz
             ghalgo::apply_ghough_transform_allpix<uint8_t, CV_16U, uint16_t>(
                 img_grad, img_match, gmarr[ii].m_ghtable, 1);
             minMaxLoc(img_match, nullptr, &qmax, nullptr, &qptmax);
-
+            qmax = qmax / static_cast<double>(gmarr[ii].m_ghtable.max_votes);
+            
             if (qmax > qallmax)
             {
                 qallmax = qmax;
                 qidmax = ii;
+                qptmax_offset = qptmax - tptq_mid;
             }
         }
+
+        roffset = tptq_offset - tpt0_offset[qidmax] - qptmax_offset;
+        rang = scan_angs_offsets[qidmax];
     }
 }

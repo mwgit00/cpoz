@@ -352,7 +352,7 @@ int main()
     Size matchsz;
     gm.init(1, 7, 0.5, 8.0);
 
-#if 1
+#if 0
     lidar.jitter_angle_deg_u = 0.5;// 1.0;
     lidar.jitter_range_cm_u = 4.0;// 4.0;
     lidar.jitter_sync_deg_u = 0.5;// 1.0;
@@ -380,6 +380,9 @@ int main()
         Mat img_mask;
         std::vector<double> vscan;
 
+        Point slam_offset;
+        double slam_angle;
+
         std::ostringstream oss;
         oss << "_" << i << ".png";
         
@@ -389,56 +392,34 @@ int main()
 
         // get a scan from LIDAR and convert to 2D blob image
         lidar.run_scan();
-        ghslam.scan_to_img(img_scan, img_mask, pt0_scan, 7, lidar.get_last_scan());
 
         if (i == 0)
         {
             ghslam.update_scan_templates(lidar.get_last_scan());
-            gm.init_ghough_table_from_img(img_scan);
-            tpt0_scan = pt0_scan;
-            tpt0_mid = (img_scan.size() / 2);
-            tpt0_offset = tpt0_scan - tpt0_mid;
         }
         
         {
-            Mat igrad;
-            Mat imatch;
-            double qmax;
-            Point ptmax;
-            Point ptmax_offset;
-
-            tptq_scan = pt0_scan;
-            tptq_mid = (img_scan.size() / 2);
-            tptq_offset = tptq_scan - tptq_mid;
-
-            Point fud = (img_scan.size() / 2);
-
-            ghslam.perform_match(pt0_scan, img_scan);
-            //gm.apply_ghough(img_scan, igrad, imatch);
-            gm.create_masked_gradient_orientation_img(img_scan, igrad);
-            igrad = igrad & img_mask;
-            ghalgo::apply_ghough_transform_allpix<uint8_t, CV_16U, uint16_t>(igrad, imatch, gm.m_ghtable, 1);
-
-            minMaxLoc(imatch, nullptr, &qmax, nullptr, &ptmax);
-
+            ghslam.perform_match(lidar.get_last_scan(), slam_offset, slam_angle);
+#if 0
             Mat igradn;
             Mat imatchn;
             normalize(igrad, igradn, 0, 255, NORM_MINMAX);
             normalize(imatch, imatchn, 0, 65535, NORM_MINMAX);
             imwrite("zzghg" + oss.str(), igradn);
             imwrite("zzghm" + oss.str(), imatchn);
-
-            ptmax_offset = ptmax - tptq_mid;
-            Point slam_offset = tptq_offset - tpt0_offset - ptmax_offset;
+#endif
+//            ptmax_offset = ptmax - tptq_mid;
+  //          Point slam_offset = tptq_offset - tpt0_offset - ptmax_offset;
         }
 
+        ghslam.update_scan_templates(lidar.get_last_scan());
         lidar.draw_last_scan(img_room);
         imwrite("zzroom" + oss.str(), img_room);
 
         // note scan point and image center point
-        circle(img_scan, pt0_scan, 3, 0, -1);
-        circle(img_scan, { img_scan.size().width / 2, img_scan.size().height / 2 }, 3, 128, -1);
-        imwrite("zzscan" + oss.str(), img_scan);
-        imwrite("zzmask" + oss.str(), img_mask);
+        //circle(img_scan, pt0_scan, 3, 0, -1);
+        //circle(img_scan, { img_scan.size().width / 2, img_scan.size().height / 2 }, 3, 128, -1);
+        //imwrite("zzscan" + oss.str(), img_scan);
+        //imwrite("zzmask" + oss.str(), img_mask);
     }
 }
