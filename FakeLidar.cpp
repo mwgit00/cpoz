@@ -67,7 +67,7 @@ namespace cpoz
 
     void FakeLidar::draw_last_scan(cv::Mat& rimg) const
     {
-        img_floorplan.copyTo(rimg);
+        //img_floorplan.copyTo(rimg);
         for (size_t nn = 0; nn < last_scan.size(); nn++)
         {
             double mag = last_scan[nn];

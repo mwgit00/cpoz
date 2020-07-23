@@ -59,6 +59,7 @@ using namespace cv;
 
 static bool is_rec_enabled = false;
 static bool is_loc_enabled = false;
+static int vv = 9;
 const char * stitle = "CPOZ Test Application";
 int n_record_ctr = 0;
 
@@ -127,11 +128,11 @@ void test_room2()
 }
 
 
-bool wait_and_check_keys()
+bool wait_and_check_keys(const int delay_ms = 1)
 {
     bool result = true;
 
-    int nkey = waitKey(1);
+    int nkey = waitKey(delay_ms);
     char ckey = static_cast<char>(nkey);
 
     // check that a keypress has been returned
@@ -147,7 +148,17 @@ bool wait_and_check_keys()
             switch (ckey)
             {
             case 'r': is_rec_enabled = !is_rec_enabled; std::cout << "REC\n"; break;
-            case 'l': is_loc_enabled = !is_loc_enabled; std::cout << "LOC\n"; break;
+            //case 'l': is_loc_enabled = !is_loc_enabled; std::cout << "LOC\n"; break;
+            case 'a': vv = 0; break;
+            case 's': vv = 1; break; 
+            case 'd': vv = 2; break;
+            case 'f': vv = 3; break;
+            case 'g': vv = 4; break;
+            case 'h': vv = 5; break;
+            case 'j': vv = 6; break;
+            case 'k': vv = 7; break;
+            case 'l': vv = 8; break;
+            case 'b': vv = 9; break;
             default: break;
             }
         }
@@ -336,6 +347,105 @@ void loop(void)
 }
 
 
+static cv::Point2d get_cos_sin(const double ang_deg)
+{
+    double c = cos(ang_deg * CV_PI / 180.0);
+    double s = cos(ang_deg * CV_PI / 180.0);
+    return { c, s };
+}
+
+
+void vroom(void)
+{
+    Mat img_orig;
+    Mat img_viewer;
+    int ticker = 0;
+
+    cpoz::GHSLAM ghslam;
+    cpoz::FakeLidar lidar;
+    ghalgo::GradientMatcher gm;
+
+    Point slam_offset;
+    double slam_angle;
+
+    std::vector<Point2d> velcomp;
+    velcomp.resize(8);
+    velcomp.push_back(get_cos_sin(-7));
+    velcomp.push_back(get_cos_sin(-5));
+    velcomp.push_back(get_cos_sin(-2));
+    velcomp.push_back(get_cos_sin(0));
+    velcomp.push_back(get_cos_sin(2));
+    velcomp.push_back(get_cos_sin(5));
+    velcomp.push_back(get_cos_sin(7));
+    velcomp.push_back(get_cos_sin(0));
+
+#if 1
+    // really noisy LIDAR
+    lidar.jitter_angle_deg_u = 0.5;// 1.0;
+    lidar.jitter_range_cm_u = 4.0;// 4.0;
+    lidar.jitter_sync_deg_u = 0.5;// 1.0;
+#endif
+
+    lidar.set_scan_angs(ghslam.get_scan_angs());
+    lidar.load_floorplan(".\\docs\\apt_1cmpp.png");
+
+    img_orig = imread(".\\docs\\apt_1cmpp.png", IMREAD_GRAYSCALE);
+
+    // and the image processing loop is running...
+    bool is_running = true;
+
+    Point botpos = { 400, 400 };
+    double botang = 0.0;
+    Point2d botvel = { 0, 0 };
+    double botvelmag = 0.0;
+
+    while (is_running)
+    {
+        lidar.set_pos(botpos);
+        lidar.run_scan();
+
+        if ((ticker % 5) == 0)
+        {
+            ghslam.update_scan_templates(lidar.get_last_scan());
+        }
+
+        ghslam.perform_match(lidar.get_last_scan(), slam_offset, slam_angle);
+        std::cout << slam_offset << "  " << slam_angle << std::endl;
+        
+        img_orig.copyTo(img_viewer);
+        circle(img_viewer, { ticker * 10, 5 }, 3, 128, -1);
+        ticker = (ticker + 1) % 40;
+        circle(img_viewer, { ticker * 10, 5 }, 3, 0, -1);
+
+        lidar.draw_last_scan(img_viewer);
+
+        const int r = 20;
+        circle(img_viewer, botpos, r, 192, -1);
+        circle(img_viewer, botpos, r, 0, 1);
+        int angx = static_cast<int>(cos(botang) * r);
+        int angy = static_cast<int>(sin(botang) * r);
+        line(img_viewer, botpos, botpos + Point{ angx, angy }, 255, 3);
+
+
+        // always show best match contour and target dot on BGR image
+        image_output(img_viewer);
+
+        // handle keyboard events and end when ESC is pressed
+        is_running = wait_and_check_keys(25);
+
+        botvelmag = (vv == 9) ? 0.0 : 1.0;
+        botvel = { botvelmag, botvelmag };
+        Point2d dd = botpos;
+        dd = dd + botvel;
+        botpos = dd;
+    }
+
+    // when everything is done, release the capture device and windows
+    cv::destroyAllWindows();
+}
+
+
+
 
 int main()
 {
@@ -348,6 +458,9 @@ int main()
     //test_room1();
     //test_room2();
     //loop();
+
+    vroom();
+    return 0;
 
     Size matchsz;
     gm.init(1, 7, 0.5, 8.0);
@@ -413,7 +526,7 @@ int main()
         }
 
         ghslam.update_scan_templates(lidar.get_last_scan());
-        lidar.draw_last_scan(img_room);
+//        lidar.draw_last_scan(img_room);
         imwrite("zzroom" + oss.str(), img_room);
 
         // note scan point and image center point
