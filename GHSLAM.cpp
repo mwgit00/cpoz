@@ -34,8 +34,8 @@ namespace cpoz
     using namespace cv;
 
     constexpr int PAD_BORDER = 31;              // big enough so rotation doesn't chop off pixels
-    constexpr size_t GMARR_SZ = 31;             // big enough to provided enough angle resolution
-    constexpr double ANG_STEP_SEARCH = 1.0;    // degrees
+    constexpr size_t GMARR_SZ = 31;             // big enough to provide enough angle resolution
+    constexpr double ANG_STEP_SEARCH = 1.0;     // degrees
     constexpr double ANG_STEP_LIDAR = 4.0;      // degrees
     constexpr double MAX_RNG_LIDAR = 1200.0;    // 12m
 
@@ -43,7 +43,7 @@ namespace cpoz
     GHSLAM::GHSLAM() :
         slam_loc({ 0, 0}),
         slam_ang(0.0),
-        mscale(0.125)
+        mscale(0.25)
     {
         gmarr.resize(GMARR_SZ);
         tpt0_offset.resize(GMARR_SZ);
@@ -53,7 +53,7 @@ namespace cpoz
             rgm.init(1, 3, 0.2, 16.0);
         }
 
-        // 8000 samples/s, 2Hz-10Hz ???
+        // cheap COTS LIDAR:  8000 samples/s, 2Hz-10Hz ???
         init_scan_angs(0.0, 360.0, ANG_STEP_LIDAR, ANG_STEP_SEARCH, GMARR_SZ);
     }
     
@@ -148,10 +148,10 @@ namespace cpoz
             }
 
             // put points into a contour data structure
-            // and then draw them into the image as filled blob (with anti-aliased lines ???)
+            // and then draw them into the image as filled blob
             std::vector<std::vector<Point>> cc;
             cc.push_back(pts);
-            drawContours(rimg, cc, 0, 255, cv::FILLED);// , cv::LINE_AA);
+            drawContours(rimg, cc, 0, 255, cv::FILLED);
 
             // generate a mask image
             // draw lines between points but filter out any that are too long
@@ -167,7 +167,7 @@ namespace cpoz
                 double r = sqrt(ptdiff.x * ptdiff.x + ptdiff.y * ptdiff.y);
                 if (r < len_thr)
                 {
-                    line(rimgmask, pt0, pt1, 255, 7);
+                    line(rimgmask, pt0, pt1, 255, 7);  // FIXME -- is width okay ???
                 }
             }
 
@@ -213,21 +213,16 @@ namespace cpoz
     {
         const size_t sz = gmarr.size();
 
-        Mat img_scan;
-        Mat img_mask;
-        Mat img_grad;
-        Point pt0_scan;
-
         // convert scan to an image (no rotation)
-        scan_to_img(img_scan, img_mask, pt0_scan, sz / 2, rscan);
+        scan_to_img(m_img_scan, m_img_mask, m_pt0_scan, sz / 2, rscan);
 
-        Point tptq_mid = (img_scan.size() / 2);
-        Point tptq_offset = pt0_scan - tptq_mid;
+        Point tptq_mid = (m_img_scan.size() / 2);
+        Point tptq_offset = m_pt0_scan - tptq_mid;
 
         // they are all identical so pick matcher 0
         // to get gradient image for running match
-        gmarr[0].create_masked_gradient_orientation_img(img_scan, img_grad);
-        img_grad = img_grad & img_mask;
+        gmarr[0].create_masked_gradient_orientation_img(m_img_scan, m_img_grad);
+        m_img_grad = m_img_grad & m_img_mask;
 
         // search for best orientation match
         // this match will also provide the translation
@@ -241,7 +236,7 @@ namespace cpoz
             Point qptmax;
 
             ghalgo::apply_ghough_transform_allpix<uint8_t, CV_16U, uint16_t>(
-                img_grad, img_match, gmarr[ii].m_ghtable, 1);
+                m_img_grad, img_match, gmarr[ii].m_ghtable, 1);
             minMaxLoc(img_match, nullptr, &qmax, nullptr, &qptmax);
             qmax = qmax / static_cast<double>(gmarr[ii].m_ghtable.max_votes);
             

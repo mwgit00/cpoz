@@ -35,7 +35,9 @@ namespace cpoz
         range_dec_pt_adjust(1),
         jitter_range_cm_u(0.2),
         jitter_angle_deg_u(0.25),
-        jitter_sync_deg_u(0.25)
+        jitter_sync_deg_u(0.25),
+        is_angle_noise_enabled(true),
+        is_range_noise_enabled(true)
     {
 
     }
@@ -76,8 +78,8 @@ namespace cpoz
 
             // draw ray from real-world position
             // use noisy measurements for angle and length of ray
-            line(rimg, pos, { pos.x + dx, pos.y + dy }, 32);
-            circle(rimg, { pos.x + dx, pos.y + dy }, 3, 64, -1);
+            line(rimg, world_pos, { world_pos.x + dx, world_pos.y + dy }, 32);
+            circle(rimg, { world_pos.x + dx, world_pos.y + dy }, 3, 64, -1);
         }
     }
 
@@ -97,10 +99,18 @@ namespace cpoz
         // create jitter in individual measurement angles
         for (const auto& rdeg : scan_angs)
         {
-            double noise = randu<double>();
-            double ang_with_jitter = rdeg + jitter_angle_deg_u * 2.0 * (noise - 0.5);
-            ang_with_jitter += sync_jitter;
-            double ang_rad = ang_with_jitter * CV_PI / 180.0;
+            double ang_rad;
+            if (is_angle_noise_enabled)
+            {
+                double noise = randu<double>();
+                double ang_with_jitter = rdeg + world_ang + jitter_angle_deg_u * 2.0 * (noise - 0.5);
+                ang_with_jitter += sync_jitter;
+                ang_rad = ang_with_jitter * CV_PI / 180.0;
+            }
+            else
+            {
+                ang_rad = (rdeg + world_ang) * CV_PI / 180.0;
+            }
             jitter_cos_sin.push_back(cv::Point2d(cos(ang_rad), sin(ang_rad)));
         }
 
@@ -150,8 +160,8 @@ namespace cpoz
                 // get unit vector and start point for scan
                 double dx0 = r.x;
                 double dy0 = r.y;
-                double a0 = pos.x;
-                double b0 = pos.y;
+                double a0 = world_pos.x;
+                double b0 = world_pos.y;
 
                 double t0;
                 double t1;
@@ -203,11 +213,14 @@ namespace cpoz
         // and apply digits-after-decimal-point adjustment
         for (auto& r : last_scan)
         {
-            double noise = randu<double>();
-            double rnoisy = r + jitter_range_cm_u * 2.0 * (noise - 0.5);
-            int inew = static_cast<int>((rnoisy * range_dec_pt_adjust) + 0.5);
-            double rnew = static_cast<double>(inew) / range_dec_pt_adjust;
-            r = rnew;
+            if (is_range_noise_enabled)
+            {
+                double noise = randu<double>();
+                double rnoisy = r + jitter_range_cm_u * 2.0 * (noise - 0.5);
+                int inew = static_cast<int>((rnoisy * range_dec_pt_adjust) + 0.5);
+                double rnew = static_cast<double>(inew) / range_dec_pt_adjust;
+                r = rnew;
+            }
         }
     }
 }

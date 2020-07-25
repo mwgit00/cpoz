@@ -38,8 +38,8 @@ namespace cpoz
         void load_floorplan(const std::string& rspath);
 
         void set_scan_angs(const std::vector<double>& rvec) { scan_angs = rvec; }
-        void set_pos(const cv::Point& rpt) { pos = rpt; }
-        void set_ang(const double ang) { this->ang = ang; }
+        void set_pos(const cv::Point& rpt) { world_pos = rpt; }
+        void set_ang(const double ang) { this->world_ang = ang; }
 
         void run_scan(void);        ///< simulate a scan with noise
         
@@ -55,14 +55,17 @@ namespace cpoz
         double jitter_range_cm_u;   ///< indiv. range measurement jitter, default +-0.2cm
         double jitter_angle_deg_u;  ///< indiv. measurement angle jitter, default +-0.25deg
         double jitter_sync_deg_u;   ///< sync angle jitter, default +-0.25deg
+
+        bool is_angle_noise_enabled;
+        bool is_range_noise_enabled;
         
     private:
         
         cv::Mat img_floorplan;                          ///< binary overhead image of floorplan
         std::vector<std::vector<cv::Point>> contours;   ///< "walls" extracted from floorplan img
 
-        cv::Point pos;  ///< real-world position in floorplan
-        double ang;     ///< real-world orienatation angle in floorplan (degrees)
+        cv::Point world_pos;    ///< real-world position in floorplan
+        double world_ang;       ///< real-world orienatation angle in floorplan (degrees)
 
         std::vector<double> last_scan;              ///< last result from run_scan
 

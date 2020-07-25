@@ -57,6 +57,12 @@ namespace cpoz
             cv::Point& roffset,
             double& rang);
 
+    public:
+
+        cv::Mat m_img_scan;
+        cv::Mat m_img_mask;
+        cv::Mat m_img_grad;
+        cv::Point m_pt0_scan;
 
     private:
         cv::Point slam_loc;  ///< calculated position

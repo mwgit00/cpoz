@@ -60,6 +60,7 @@ using namespace cv;
 static bool is_rec_enabled = false;
 static bool is_loc_enabled = false;
 static int vv = 9;
+static bool is_resync = true;
 const char * stitle = "CPOZ Test Application";
 int n_record_ctr = 0;
 
@@ -159,6 +160,7 @@ bool wait_and_check_keys(const int delay_ms = 1)
             case 'k': vv = 7; break;
             case 'l': vv = 8; break;
             case 'b': vv = 9; break;
+            case '=': is_resync = true; break;
             default: break;
             }
         }
@@ -350,7 +352,7 @@ void loop(void)
 static cv::Point2d get_cos_sin(const double ang_deg)
 {
     double c = cos(ang_deg * CV_PI / 180.0);
-    double s = cos(ang_deg * CV_PI / 180.0);
+    double s = sin(ang_deg * CV_PI / 180.0);
     return { c, s };
 }
 
@@ -359,6 +361,7 @@ void vroom(void)
 {
     Mat img_orig;
     Mat img_viewer;
+    Mat img_viewer_bgr;
     int ticker = 0;
 
     cpoz::GHSLAM ghslam;
@@ -368,18 +371,20 @@ void vroom(void)
     Point slam_offset;
     double slam_angle;
 
-    std::vector<Point2d> velcomp;
-    velcomp.resize(8);
-    velcomp.push_back(get_cos_sin(-7));
-    velcomp.push_back(get_cos_sin(-5));
-    velcomp.push_back(get_cos_sin(-2));
-    velcomp.push_back(get_cos_sin(0));
-    velcomp.push_back(get_cos_sin(2));
-    velcomp.push_back(get_cos_sin(5));
-    velcomp.push_back(get_cos_sin(7));
-    velcomp.push_back(get_cos_sin(0));
+    // rotation velocity (degrees per frame)
+    std::vector<double> velcomp;
+    velcomp.push_back(-2.0);
+    velcomp.push_back(-1.5);
+    velcomp.push_back(-0.7);
+    velcomp.push_back(-0.2);
+    velcomp.push_back(0.0);
+    velcomp.push_back(0.2);
+    velcomp.push_back(0.7);
+    velcomp.push_back(1.5);
+    velcomp.push_back(2.0);
+    velcomp.push_back(0.0);
 
-#if 1
+#if 0
     // really noisy LIDAR
     lidar.jitter_angle_deg_u = 0.5;// 1.0;
     lidar.jitter_range_cm_u = 4.0;// 4.0;
@@ -394,50 +399,74 @@ void vroom(void)
     // and the image processing loop is running...
     bool is_running = true;
 
-    Point botpos = { 400, 400 };
+    Point2d botpos = { 400.0, 400.0 };
     double botang = 0.0;
-    Point2d botvel = { 0, 0 };
+    Point2d botvel = { 0.0, 0.0 };
     double botvelmag = 0.0;
+    double botangvel = 0.0;
 
     while (is_running)
     {
         lidar.set_pos(botpos);
+        lidar.set_ang(botang);
         lidar.run_scan();
 
-        if ((ticker % 5) == 0)
+        //if ((ticker % 10) == 0)
+        if (is_resync)
         {
             ghslam.update_scan_templates(lidar.get_last_scan());
+            is_resync = false;
         }
 
         ghslam.perform_match(lidar.get_last_scan(), slam_offset, slam_angle);
         std::cout << slam_offset << "  " << slam_angle << std::endl;
-        
+
         img_orig.copyTo(img_viewer);
-        circle(img_viewer, { ticker * 10, 5 }, 3, 128, -1);
-        ticker = (ticker + 1) % 40;
-        circle(img_viewer, { ticker * 10, 5 }, 3, 0, -1);
+        Rect mroi = { {0,0}, ghslam.m_img_mask.size() };
+        ghslam.m_img_mask.copyTo(img_viewer(mroi));
 
         lidar.draw_last_scan(img_viewer);
 
+        // draw robot
         const int r = 20;
-        circle(img_viewer, botpos, r, 192, -1);
-        circle(img_viewer, botpos, r, 0, 1);
-        int angx = static_cast<int>(cos(botang) * r);
-        int angy = static_cast<int>(sin(botang) * r);
-        line(img_viewer, botpos, botpos + Point{ angx, angy }, 255, 3);
+        Point ibotpos = botpos;
+        circle(img_viewer, ibotpos, r, 192, -1);
+        circle(img_viewer, ibotpos, r, 0, 1);
+        Point2d angd = get_cos_sin(botang);
+        int angx = static_cast<int>(angd.x * r * 0.8);
+        int angy = static_cast<int>(angd.y * r * 0.8);
+        line(img_viewer, ibotpos, ibotpos + Point{ angx, angy }, 255, 3);
 
+        // convert image to BGR and draw robot position and direction
+        cvtColor(img_viewer, img_viewer_bgr, COLOR_GRAY2BGR);
+        circle(img_viewer_bgr, ghslam.m_pt0_scan, 3, SCA_GREEN, -1);
+        line(img_viewer_bgr, ghslam.m_pt0_scan, ghslam.m_pt0_scan + Point{10, 0}, SCA_GREEN, 1);
 
-        // always show best match contour and target dot on BGR image
-        image_output(img_viewer);
+        // show the BGR image
+        image_output(img_viewer_bgr);
 
         // handle keyboard events and end when ESC is pressed
         is_running = wait_and_check_keys(25);
 
-        botvelmag = (vv == 9) ? 0.0 : 1.0;
-        botvel = { botvelmag, botvelmag };
-        Point2d dd = botpos;
-        dd = dd + botvel;
-        botpos = dd;
+        if ((vv == 4) || (vv == 9))
+        {
+            // forward or stop
+            botvelmag = (vv == 4) ? 1.5 : 0.0;
+            botangvel = 0.0;
+        }
+        else
+        {
+            // spin in place
+            botvelmag = 0.0;
+            botangvel = velcomp[vv];
+        }
+        
+        Point2d dpos = get_cos_sin(botang) * botvelmag;
+        botpos += dpos;
+
+        botang += botangvel;
+        if (botang >= 360.0) botang -= 360.0;
+        if (botang < 0.0) botang += 360.0;
     }
 
     // when everything is done, release the capture device and windows
