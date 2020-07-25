@@ -69,7 +69,6 @@ namespace cpoz
 
     void FakeLidar::draw_last_scan(cv::Mat& rimg) const
     {
-        //img_floorplan.copyTo(rimg);
         for (size_t nn = 0; nn < last_scan.size(); nn++)
         {
             double mag = last_scan[nn];
@@ -78,8 +77,12 @@ namespace cpoz
 
             // draw ray from real-world position
             // use noisy measurements for angle and length of ray
-            line(rimg, world_pos, { world_pos.x + dx, world_pos.y + dy }, 32);
-            circle(rimg, { world_pos.x + dx, world_pos.y + dy }, 3, 64, -1);
+            // skip scan ray facing backward as visual indicator of scan orientation
+            if (nn != last_scan.size() / 2)
+            {
+                line(rimg, world_pos, { world_pos.x + dx, world_pos.y + dy }, 64);
+                circle(rimg, { world_pos.x + dx, world_pos.y + dy }, 3, 64, -1);
+            }
         }
     }
 

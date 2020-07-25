@@ -65,11 +65,13 @@ namespace cpoz
         cv::Point m_pt0_scan;
 
     private:
+
         cv::Point slam_loc;  ///< calculated position
         double slam_ang;     ///< calculated heading
 
         double mscale;
-        
+        int m_mask_line_width;
+
         std::vector<double> scan_angs;          ///< ideal scan angles
         std::vector<double> scan_angs_offsets;  ///< offsets for angle search
         std::vector<std::vector<cv::Point2d>> scan_cos_sin; ///< ideal cos and sin for scan angles

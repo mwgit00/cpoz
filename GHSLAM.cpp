@@ -36,21 +36,24 @@ namespace cpoz
     constexpr int PAD_BORDER = 31;              // big enough so rotation doesn't chop off pixels
     constexpr size_t GMARR_SZ = 31;             // big enough to provide enough angle resolution
     constexpr double ANG_STEP_SEARCH = 1.0;     // degrees
-    constexpr double ANG_STEP_LIDAR = 4.0;      // degrees
+    constexpr double ANG_STEP_LIDAR = 1.0;      // degrees
     constexpr double MAX_RNG_LIDAR = 1200.0;    // 12m
 
     
     GHSLAM::GHSLAM() :
-        slam_loc({ 0, 0}),
+        slam_loc({ 0, 0 }),
         slam_ang(0.0),
-        mscale(0.25)
+        mscale(0.25),
+        m_mask_line_width(1)
     {
         gmarr.resize(GMARR_SZ);
         tpt0_offset.resize(GMARR_SZ);
 
+        // for Sobel size 3, use line width 7 in mask ???
+        // higher angle step seems to provide better rotation match
         for (auto& rgm : gmarr)
         {
-            rgm.init(1, 3, 0.2, 16.0);
+            rgm.init(1, -1, 0.2, 8.0);
         }
 
         // cheap COTS LIDAR:  8000 samples/s, 2Hz-10Hz ???
@@ -167,7 +170,7 @@ namespace cpoz
                 double r = sqrt(ptdiff.x * ptdiff.x + ptdiff.y * ptdiff.y);
                 if (r < len_thr)
                 {
-                    line(rimgmask, pt0, pt1, 255, 7);  // FIXME -- is width okay ???
+                    line(rimgmask, pt0, pt1, 255, m_mask_line_width);
                 }
             }
 
@@ -238,13 +241,17 @@ namespace cpoz
             ghalgo::apply_ghough_transform_allpix<uint8_t, CV_16U, uint16_t>(
                 m_img_grad, img_match, gmarr[ii].m_ghtable, 1);
             minMaxLoc(img_match, nullptr, &qmax, nullptr, &qptmax);
-            qmax = qmax / static_cast<double>(gmarr[ii].m_ghtable.max_votes);
-            
-            if (qmax > qallmax)
+
+            double qmaxtotal = static_cast<double>(gmarr[ii].m_ghtable.max_votes);
+            if (qmaxtotal > 0.0)
             {
-                qallmax = qmax;
-                qidmax = ii;
-                qptmax_offset = qptmax - tptq_mid;
+                qmax = qmax / qmaxtotal;
+                if (qmax > qallmax)
+                {
+                    qallmax = qmax;
+                    qidmax = ii;
+                    qptmax_offset = qptmax - tptq_mid;
+                }
             }
         }
 

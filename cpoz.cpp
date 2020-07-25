@@ -60,7 +60,8 @@ using namespace cv;
 static bool is_rec_enabled = false;
 static bool is_loc_enabled = false;
 static int vv = 9;
-static bool is_resync = true;
+static bool is_resync = true;   // sync on first iteration
+static bool is_rehome = false;
 const char * stitle = "CPOZ Test Application";
 int n_record_ctr = 0;
 
@@ -161,6 +162,7 @@ bool wait_and_check_keys(const int delay_ms = 1)
             case 'l': vv = 8; break;
             case 'b': vv = 9; break;
             case '=': is_resync = true; break;
+            case '0': is_rehome = true; break;
             default: break;
             }
         }
@@ -371,7 +373,16 @@ void vroom(void)
     Point slam_offset;
     double slam_angle;
 
-    // rotation velocity (degrees per frame)
+    // various starting positions in default floorplan
+    std::vector<Point2d> vpos;
+    vpos.push_back({ 870.0, 360.0 });
+    vpos.push_back({ 930.0, 630.0 });
+    vpos.push_back({ 1140.0, 110.0 });
+    vpos.push_back({ 1180.0, 440.0 });
+    vpos.push_back({ 560.0, 540.0 });
+    vpos.push_back({ 650.0, 140.0 });
+
+    // rotation velocity settings (degrees per frame)
     std::vector<double> velcomp;
     velcomp.push_back(-2.0);
     velcomp.push_back(-1.5);
@@ -386,20 +397,21 @@ void vroom(void)
 
 #if 0
     // really noisy LIDAR
-    lidar.jitter_angle_deg_u = 0.5;// 1.0;
-    lidar.jitter_range_cm_u = 4.0;// 4.0;
-    lidar.jitter_sync_deg_u = 0.5;// 1.0;
+    lidar.jitter_angle_deg_u = 0.5;
+    lidar.jitter_range_cm_u = 4.0;
+    lidar.jitter_sync_deg_u = 0.5;
 #endif
 
     lidar.set_scan_angs(ghslam.get_scan_angs());
-    lidar.load_floorplan(".\\docs\\apt_1cmpp.png");
+    lidar.load_floorplan(".\\docs\\apt_1cmpp_720p.png");
 
-    img_orig = imread(".\\docs\\apt_1cmpp.png", IMREAD_GRAYSCALE);
+    img_orig = imread(".\\docs\\apt_1cmpp_720p.png", IMREAD_GRAYSCALE);
 
     // and the image processing loop is running...
     bool is_running = true;
 
-    Point2d botpos = { 400.0, 400.0 };
+    size_t iivpos = 0;
+    Point2d botpos = vpos[0];
     double botang = 0.0;
     Point2d botvel = { 0.0, 0.0 };
     double botvelmag = 0.0;
@@ -407,6 +419,21 @@ void vroom(void)
 
     while (is_running)
     {
+        if (is_rehome)
+        {
+            // stop robot and put it at new home position
+            is_rehome = false;
+            vv = 9;
+            iivpos++;
+            if (iivpos == vpos.size()) iivpos = 0;
+            botpos = vpos[iivpos];
+            botang = 0.0;
+            botvel = { 0.0, 0.0 };
+            botvelmag = 0.0;
+            botangvel = 0.0;
+            is_resync = true;
+        }
+
         lidar.set_pos(botpos);
         lidar.set_ang(botang);
         lidar.run_scan();
@@ -441,6 +468,20 @@ void vroom(void)
         cvtColor(img_viewer, img_viewer_bgr, COLOR_GRAY2BGR);
         circle(img_viewer_bgr, ghslam.m_pt0_scan, 3, SCA_GREEN, -1);
         line(img_viewer_bgr, ghslam.m_pt0_scan, ghslam.m_pt0_scan + Point{10, 0}, SCA_GREEN, 1);
+
+        {
+            std::ostringstream oss;
+            oss << " ROOM = " << std::setw(4) << ibotpos.x << ", " << ibotpos.y;
+            oss << "  " << std::fixed << std::setprecision(1) << botang;
+            putText(img_viewer_bgr, oss.str(), { 0, 400 }, FONT_HERSHEY_PLAIN, 2.0, SCA_BLACK, 2);
+        }
+
+        {
+            std::ostringstream oss;
+            oss << " SLAM = " << std::setw(4) << slam_offset.x << ", " << slam_offset.y;
+            oss << "  " << std::fixed << std::setprecision(1) << slam_angle;
+            putText(img_viewer_bgr, oss.str(), { 0, 440 }, FONT_HERSHEY_PLAIN, 2.0, SCA_BLUE, 2);
+        }
 
         // show the BGR image
         image_output(img_viewer_bgr);
