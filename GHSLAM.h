@@ -65,6 +65,7 @@ namespace cpoz
         cv::Point m_pt0_scan;
 
         cv::Mat m_img_template_0;
+        cv::Point m_pt0_template;
 
     private:
 

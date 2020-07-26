@@ -472,15 +472,21 @@ void vroom(void)
         img_orig.copyTo(img_viewer);
         Rect mroi = { {0,0}, ghslam.m_img_mask.size() };
         ghslam.m_img_mask.copyTo(img_viewer(mroi));
-        Rect mroi0 = { {0,500}, ghslam.m_img_template_0.size() };
+        Rect mroi0 = { {0,410}, ghslam.m_img_template_0.size() };
         ghslam.m_img_template_0.copyTo(img_viewer(mroi0));
 
         lidar.draw_last_scan(img_viewer);
 
-        // convert image to BGR and draw robot position and direction in map
+        // now convert image to BGR...
         cvtColor(img_viewer, img_viewer_bgr, COLOR_GRAY2BGR);
+        
+        // draw robot position and direction in current map
         circle(img_viewer_bgr, ghslam.m_pt0_scan, 3, SCA_GREEN, -1);
         line(img_viewer_bgr, ghslam.m_pt0_scan, ghslam.m_pt0_scan + Point{10, 0}, SCA_GREEN, 1);
+
+        Point t0 = ghslam.m_pt0_template + Point{ 0, 410 };
+        circle(img_viewer_bgr, t0, 3, SCA_GREEN, -1);
+        line(img_viewer_bgr, t0, t0 + Point{ 10, 0 }, SCA_GREEN, 1);
 
         // now draw robot in floorplan
         const int r = 20;
@@ -496,14 +502,14 @@ void vroom(void)
             std::ostringstream oss;
             oss << " ROOM = " << std::setw(4) << ibotpos.x << ", " << ibotpos.y;
             oss << "  " << std::fixed << std::setprecision(1) << botang;
-            putText(img_viewer_bgr, oss.str(), { 0, 400 }, FONT_HERSHEY_PLAIN, 2.0, SCA_BLACK, 2);
+            putText(img_viewer_bgr, oss.str(), { 0, 360 }, FONT_HERSHEY_PLAIN, 2.0, SCA_BLACK, 2);
         }
 
         {
             std::ostringstream oss;
             oss << " SLAM = " << std::setw(4) << slam_offset.x << ", " << slam_offset.y;
             oss << "  " << std::fixed << std::setprecision(1) << slam_angle;
-            putText(img_viewer_bgr, oss.str(), { 0, 440 }, FONT_HERSHEY_PLAIN, 2.0, SCA_BLUE, 2);
+            putText(img_viewer_bgr, oss.str(), { 0, 385 }, FONT_HERSHEY_PLAIN, 2.0, SCA_BLUE, 2);
         }
 
         // show the BGR image

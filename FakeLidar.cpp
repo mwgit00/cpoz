@@ -60,10 +60,11 @@ namespace cpoz
         // extract contours of room
         // use "simple" approximation to encode long straight segments as two points
         findContours(img_binary, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-        
+#if 0
         // generate test image
         drawContours(img_test, contours, 0, 128, 1);
         imwrite("zzfloorplan.png", img_test);
+#endif
     }
 
 

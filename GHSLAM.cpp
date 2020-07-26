@@ -34,7 +34,7 @@ namespace cpoz
     using namespace cv;
 
     constexpr int PAD_BORDER = 31;              // big enough so rotation doesn't chop off pixels
-    constexpr size_t GMARR_SZ = 31;             // big enough to provide enough angle resolution
+    constexpr size_t GMARR_SZ = 61;             // big enough to provide enough angle resolution
     constexpr double ANG_STEP_SEARCH = 1.0;     // degrees
     constexpr double ANG_STEP_LIDAR = 1.0;      // degrees
     constexpr double MAX_RNG_LIDAR = 1200.0;    // 12m
@@ -196,11 +196,6 @@ namespace cpoz
             Point pt0;
             scan_to_img(img_scan, img_mask, pt0, ii, rscan);
 
-            if (ii == sz / 2)
-            {
-                img_mask.copyTo(m_img_template_0);
-            }
-  
             gmarr[ii].create_masked_gradient_orientation_img(img_scan, img_grad);
             img_grad = img_grad & img_mask;
 
@@ -210,6 +205,12 @@ namespace cpoz
 
             Point tpt0_mid = (img_scan.size() / 2);
             tpt0_offset[ii] = pt0 - tpt0_mid;
+
+            if (ii == sz / 2)
+            {
+                img_mask.copyTo(m_img_template_0);
+                m_pt0_template = pt0;
+            }
         }
     }
 
@@ -262,5 +263,19 @@ namespace cpoz
 
         roffset = tptq_offset - tpt0_offset[qidmax] - qptmax_offset;
         rang = scan_angs_offsets[qidmax];
+
+        // un-rotate offset by matched orientation angle
+        Point p0 = roffset;
+        double rang_rad = rang * CV_PI / 180.0;
+        double cos0 = cos(rang_rad);
+        double sin0 = sin(rang_rad);
+#if 0
+        roffset.x = static_cast<int>(p0.x * cos0 - p0.y * sin0);
+        roffset.y = static_cast<int>(p0.x * sin0 + p0.y * cos0);
+#else
+        roffset.x = static_cast<int>( p0.x * cos0 + p0.y * sin0);
+        roffset.y = static_cast<int>(-p0.x * sin0 + p0.y * cos0);
+#endif
+
     }
 }
