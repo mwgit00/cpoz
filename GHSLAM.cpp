@@ -43,7 +43,7 @@ namespace cpoz
     GHSLAM::GHSLAM() :
         slam_loc({ 0, 0 }),
         slam_ang(0.0),
-        mscale(0.25),
+        mscale(0.125),
         m_mask_line_width(1)
     {
         gmarr.resize(GMARR_SZ);
@@ -195,6 +195,11 @@ namespace cpoz
 
             Point pt0;
             scan_to_img(img_scan, img_mask, pt0, ii, rscan);
+
+            if (ii == sz / 2)
+            {
+                img_mask.copyTo(m_img_template_0);
+            }
   
             gmarr[ii].create_masked_gradient_orientation_img(img_scan, img_grad);
             img_grad = img_grad & img_mask;

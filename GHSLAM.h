@@ -64,6 +64,8 @@ namespace cpoz
         cv::Mat m_img_grad;
         cv::Point m_pt0_scan;
 
+        cv::Mat m_img_template_0;
+
     private:
 
         cv::Point slam_loc;  ///< calculated position

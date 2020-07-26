@@ -60,8 +60,9 @@ using namespace cv;
 static bool is_rec_enabled = false;
 static bool is_loc_enabled = false;
 static int vv = 9;
-static bool is_resync = true;   // sync on first iteration
-static bool is_rehome = false;
+static bool is_resync = true;   // resync map (do on first iteration)
+static bool is_rehome = true;   // new position (do on first iteration)
+static bool is_ang_0 = false;   // zero the bot angle
 const char * stitle = "CPOZ Test Application";
 int n_record_ctr = 0;
 
@@ -163,6 +164,7 @@ bool wait_and_check_keys(const int delay_ms = 1)
             case 'b': vv = 9; break;
             case '=': is_resync = true; break;
             case '0': is_rehome = true; break;
+            case '-': is_ang_0 = true; break;
             default: break;
             }
         }
@@ -395,6 +397,14 @@ void vroom(void)
     velcomp.push_back(2.0);
     velcomp.push_back(0.0);
 
+    // robot state
+    size_t iivpos = vpos.size();
+    Point2d botpos;
+    double botang;
+    Point2d botvel;
+    double botvelmag;
+    double botangvel;
+
 #if 0
     // really noisy LIDAR
     lidar.jitter_angle_deg_u = 0.5;
@@ -410,13 +420,6 @@ void vroom(void)
     // and the image processing loop is running...
     bool is_running = true;
 
-    size_t iivpos = 0;
-    Point2d botpos = vpos[0];
-    double botang = 0.0;
-    Point2d botvel = { 0.0, 0.0 };
-    double botvelmag = 0.0;
-    double botangvel = 0.0;
-
     while (is_running)
     {
         if (is_rehome)
@@ -424,9 +427,21 @@ void vroom(void)
             // stop robot and put it at new home position
             is_rehome = false;
             vv = 9;
-            iivpos++;
             if (iivpos == vpos.size()) iivpos = 0;
             botpos = vpos[iivpos];
+            botang = 0.0;
+            botvel = { 0.0, 0.0 };
+            botvelmag = 0.0;
+            botangvel = 0.0;
+            is_resync = true;
+            iivpos++;
+        }
+
+        if (is_ang_0)
+        {
+            // stop robot and set angle to 0
+            is_ang_0 = false;
+            vv = 9;
             botang = 0.0;
             botvel = { 0.0, 0.0 };
             botvelmag = 0.0;
@@ -446,28 +461,36 @@ void vroom(void)
         }
 
         ghslam.perform_match(lidar.get_last_scan(), slam_offset, slam_angle);
-        std::cout << slam_offset << "  " << slam_angle << std::endl;
+
+#if 0
+        if ((abs(slam_offset.x) > 3) || (abs(slam_offset.y) > 3) || (abs(slam_angle) > 3.0))
+        {
+            is_resync = true;
+        }
+#endif
 
         img_orig.copyTo(img_viewer);
         Rect mroi = { {0,0}, ghslam.m_img_mask.size() };
         ghslam.m_img_mask.copyTo(img_viewer(mroi));
+        Rect mroi0 = { {0,500}, ghslam.m_img_template_0.size() };
+        ghslam.m_img_template_0.copyTo(img_viewer(mroi0));
 
         lidar.draw_last_scan(img_viewer);
 
-        // draw robot
-        const int r = 20;
-        Point ibotpos = botpos;
-        circle(img_viewer, ibotpos, r, 192, -1);
-        circle(img_viewer, ibotpos, r, 0, 1);
-        Point2d angd = get_cos_sin(botang);
-        int angx = static_cast<int>(angd.x * r * 0.8);
-        int angy = static_cast<int>(angd.y * r * 0.8);
-        line(img_viewer, ibotpos, ibotpos + Point{ angx, angy }, 255, 3);
-
-        // convert image to BGR and draw robot position and direction
+        // convert image to BGR and draw robot position and direction in map
         cvtColor(img_viewer, img_viewer_bgr, COLOR_GRAY2BGR);
         circle(img_viewer_bgr, ghslam.m_pt0_scan, 3, SCA_GREEN, -1);
         line(img_viewer_bgr, ghslam.m_pt0_scan, ghslam.m_pt0_scan + Point{10, 0}, SCA_GREEN, 1);
+
+        // now draw robot in floorplan
+        const int r = 20;
+        Point ibotpos = botpos;
+        circle(img_viewer_bgr, ibotpos, r, SCA_WHITE, -1);
+        circle(img_viewer_bgr, ibotpos, r, SCA_BLACK, 1);
+        Point2d angd = get_cos_sin(botang);
+        int angx = static_cast<int>(angd.x * r * 0.8);
+        int angy = static_cast<int>(angd.y * r * 0.8);
+        line(img_viewer_bgr, ibotpos, ibotpos + Point{ angx, angy }, SCA_GREEN, 3);
 
         {
             std::ostringstream oss;
