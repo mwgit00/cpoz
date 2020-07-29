@@ -144,22 +144,24 @@ namespace cpoz
             Rect r = boundingRect(pts);
             Size imgsz = Size(r.width + (2 * PAD_BORDER), r.height + (2 * PAD_BORDER));
             rimg = Mat::zeros(imgsz, CV_8UC1);
+
             for (size_t nn = 0; nn < pts.size(); nn++)
             {
                 Point ptnew = { pts[nn].x - r.x + PAD_BORDER, pts[nn].y - r.y + PAD_BORDER };
                 pts[nn] = ptnew;
             }
-
+#if 0 // mask ???
             // put points into a contour data structure
             // and then draw them into the image as filled blob
             std::vector<std::vector<Point>> cc;
             cc.push_back(pts);
             drawContours(rimg, cc, 0, 255, cv::FILLED);
-
-            // generate a mask image
-            // draw lines between points but filter out any that are too long
-            // this creates a mask that will eliminate lots of useless contour points
-            // threshold is distance between two measurements at max range
+#endif
+            // (generate a mask image ???)
+            // draw representation of the scan...
+            // draw lines between scan points but filter out any that are too long
+            // this creates an image that will eliminate lots of useless contour points
+            // the threshold is distance between two measurements at max LIDAR range
             double len_thr = MAX_RNG_LIDAR * mscale * tan(ANG_STEP_LIDAR * CV_PI / 180.0);
             rimgmask = Mat::zeros(imgsz, CV_8UC1);
             for (size_t nn = 0; nn < pts.size(); nn++)
@@ -170,7 +172,10 @@ namespace cpoz
                 double r = sqrt(ptdiff.x * ptdiff.x + ptdiff.y * ptdiff.y);
                 if (r < len_thr)
                 {
+#if 0 // mask ???
                     line(rimgmask, pt0, pt1, 255, m_mask_line_width);
+#endif
+                    line(rimg, pt0, pt1, 255, m_mask_line_width);
                 }
             }
 
@@ -197,7 +202,9 @@ namespace cpoz
             scan_to_img(img_scan, img_mask, pt0, ii, rscan);
 
             gmarr[ii].create_masked_gradient_orientation_img(img_scan, img_grad);
+#if 0 // mask ???
             img_grad = img_grad & img_mask;
+#endif
 
             ghalgo::create_lookup_table(
                 img_grad,
@@ -208,7 +215,11 @@ namespace cpoz
 
             if (ii == sz / 2)
             {
+#if 0 // mask ???
                 img_mask.copyTo(m_img_template_0);
+#else
+                img_scan.copyTo(m_img_template_0);
+#endif
                 m_pt0_template = pt0;
             }
         }
@@ -231,10 +242,14 @@ namespace cpoz
         // they are all identical so pick matcher 0
         // to get gradient image for running match
         gmarr[0].create_masked_gradient_orientation_img(m_img_scan, m_img_grad);
+#if 0 // mask ???
         m_img_grad = m_img_grad & m_img_mask;
+#endif
 
         // search for best orientation match
         // this match will also provide the translation
+        // but an "un-rotation" is required after the best match is found
+        // (instead of linear search, maybe the previous match could be start for this match ???)
         size_t qidmax = 0;
         double qallmax = 0.0;
         Point qptmax_offset;

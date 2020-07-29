@@ -471,7 +471,11 @@ void vroom(void)
 
         img_orig.copyTo(img_viewer);
         Rect mroi = { {0,0}, ghslam.m_img_mask.size() };
+#if 0 // mask ???
         ghslam.m_img_mask.copyTo(img_viewer(mroi));
+#else
+        ghslam.m_img_scan.copyTo(img_viewer(mroi));
+#endif
         Rect mroi0 = { {0,410}, ghslam.m_img_template_0.size() };
         ghslam.m_img_template_0.copyTo(img_viewer(mroi0));
 

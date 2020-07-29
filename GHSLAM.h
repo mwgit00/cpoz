@@ -28,6 +28,14 @@
 
 namespace cpoz
 {
+    typedef struct _T_GHSLAM_WAYPOINT_struct
+    {
+        cv::Point pt;
+        double ang;
+        std::vector<double> scan;
+    } T_GHSLAM_WAYPOINT;
+    
+    
     class GHSLAM
     {
     public:
