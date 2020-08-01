@@ -218,9 +218,9 @@ namespace cpoz
 #if 0 // mask ???
                 img_mask.copyTo(m_img_template_0);
 #else
-                img_scan.copyTo(m_img_template_0);
+                img_scan.copyTo(m_img_template_ang_0);
 #endif
-                m_pt0_template = pt0;
+                m_pt0_template_ang_0 = pt0;
             }
         }
     }
@@ -292,5 +292,11 @@ namespace cpoz
         roffset.y = static_cast<int>(-p0.x * sin0 + p0.y * cos0);
 #endif
 
+    }
+
+
+    void GHSLAM::add_waypoint(cpoz::T_GHSLAM_WAYPOINT& rwp)
+    {
+        m_waypoints.push_back(rwp);
     }
 }

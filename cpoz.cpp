@@ -55,14 +55,26 @@ using namespace cv;
 #define SCA_YELLOW  (cv::Scalar(0,255,255))
 #define SCA_BLUE    (cv::Scalar(255,0,0))
 #define SCA_WHITE   (cv::Scalar(255,255,255))
+#define SCA_DKGRAY  (cv::Scalar(64,64,64))
+
+
+// rotation velocity settings corresponding to keypresses (degrees per frame)
+static const std::vector<double> g_velcomp = {
+-2.0, -1.5, -0.7, -0.2,
+ 0.0,
+ 0.2,  0.7,  1.5,  2.0,
+ 0.0, };
+
+#define RO_VEL_FORWARD  (4)
+#define RO_VEL_STOP     (9)
+
 
 
 static bool is_rec_enabled = false;
 static bool is_loc_enabled = false;
-static int vv = 9;
+static int iivel = RO_VEL_STOP;
 static bool is_resync = true;   // resync map (do on first iteration)
 static bool is_rehome = true;   // new position (do on first iteration)
-static bool is_ang_0 = false;   // zero the bot angle
 const char * stitle = "CPOZ Test Application";
 int n_record_ctr = 0;
 
@@ -152,19 +164,18 @@ bool wait_and_check_keys(const int delay_ms = 1)
             {
             case 'r': is_rec_enabled = !is_rec_enabled; std::cout << "REC\n"; break;
             //case 'l': is_loc_enabled = !is_loc_enabled; std::cout << "LOC\n"; break;
-            case 'a': vv = 0; break;
-            case 's': vv = 1; break; 
-            case 'd': vv = 2; break;
-            case 'f': vv = 3; break;
-            case 'g': vv = 4; break;
-            case 'h': vv = 5; break;
-            case 'j': vv = 6; break;
-            case 'k': vv = 7; break;
-            case 'l': vv = 8; break;
-            case 'b': vv = 9; break;
+            case 'a': iivel = 0; break;
+            case 's': iivel = 1; break; 
+            case 'd': iivel = 2; break;
+            case 'f': iivel = 3; break;
+            case 'g': iivel = 4; break;
+            case 'h': iivel = 5; break;
+            case 'j': iivel = 6; break;
+            case 'k': iivel = 7; break;
+            case 'l': iivel = 8; break;
+            case 'b': iivel = 9; break;
             case '=': is_resync = true; break;
             case '0': is_rehome = true; break;
-            case '-': is_ang_0 = true; break;
             default: break;
             }
         }
@@ -372,38 +383,30 @@ void vroom(void)
     cpoz::FakeLidar lidar;
     ghalgo::GradientMatcher gm;
 
-    Point slam_offset;
-    double slam_angle;
+    Point slam_offset = { 0,0 };
+    double slam_angle = 0.0;
+
+    Point match_offset = { 0, 0 };
+    double match_angle = 0.0;
 
     // various starting positions in default floorplan
-    std::vector<Point2d> vpos;
-    vpos.push_back({ 870.0, 360.0 });
-    vpos.push_back({ 930.0, 630.0 });
-    vpos.push_back({ 1140.0, 110.0 });
-    vpos.push_back({ 1180.0, 440.0 });
-    vpos.push_back({ 560.0, 540.0 });
-    vpos.push_back({ 650.0, 140.0 });
-
-    // rotation velocity settings (degrees per frame)
-    std::vector<double> velcomp;
-    velcomp.push_back(-2.0);
-    velcomp.push_back(-1.5);
-    velcomp.push_back(-0.7);
-    velcomp.push_back(-0.2);
-    velcomp.push_back(0.0);
-    velcomp.push_back(0.2);
-    velcomp.push_back(0.7);
-    velcomp.push_back(1.5);
-    velcomp.push_back(2.0);
-    velcomp.push_back(0.0);
+    std::vector<Point2d> vhomepos;
+    vhomepos.push_back({ 870.0, 360.0 });
+    vhomepos.push_back({ 930.0, 630.0 });
+    vhomepos.push_back({ 1140.0, 110.0 });
+    vhomepos.push_back({ 1180.0, 440.0 });
+    vhomepos.push_back({ 560.0, 540.0 });
+    vhomepos.push_back({ 650.0, 140.0 });
+    size_t iivhomepos = 0;
 
     // robot state
-    size_t iivpos = vpos.size();
     Point2d botpos;
     double botang;
     Point2d botvel;
     double botvelmag;
     double botangvel;
+
+    Point pt_drawing_offset;
 
 #if 0
     // really noisy LIDAR
@@ -424,29 +427,30 @@ void vroom(void)
     {
         if (is_rehome)
         {
-            // stop robot and put it at new home position
             is_rehome = false;
-            vv = 9;
-            if (iivpos == vpos.size()) iivpos = 0;
-            botpos = vpos[iivpos];
-            botang = 0.0;
-            botvel = { 0.0, 0.0 };
-            botvelmag = 0.0;
-            botangvel = 0.0;
-            is_resync = true;
-            iivpos++;
-        }
 
-        if (is_ang_0)
-        {
-            // stop robot and set angle to 0
-            is_ang_0 = false;
-            vv = 9;
+            // reset offset for drawing map info
+            pt_drawing_offset = { static_cast<int>(vhomepos[iivhomepos].x), static_cast<int>(vhomepos[iivhomepos].y) };
+            
+            // clear map and start at 0
+            // and set flag for a resync to add first waypoint to new map
+            ghslam.m_waypoints.clear();
+            slam_offset = { 0,0 };
+            slam_angle = 0.0;
+            match_offset = { 0, 0 };
+            match_angle = 0.0;
+            is_resync = true;
+
+            // stop robot
+            iivel = RO_VEL_STOP;
+            botpos = vhomepos[iivhomepos];
             botang = 0.0;
             botvel = { 0.0, 0.0 };
             botvelmag = 0.0;
             botangvel = 0.0;
-            is_resync = true;
+
+            iivhomepos++;
+            if (iivhomepos == vhomepos.size()) iivhomepos = 0;
         }
 
         lidar.set_pos(botpos);
@@ -456,11 +460,15 @@ void vroom(void)
         //if ((ticker % 10) == 0)
         if (is_resync)
         {
+            // apply latest scan as new waypoint
             ghslam.update_scan_templates(lidar.get_last_scan());
+            slam_offset += match_offset;
+            slam_angle += match_angle;
+            ghslam.m_waypoints.push_back({ slam_offset, slam_angle, lidar.get_last_scan() });
             is_resync = false;
         }
 
-        ghslam.perform_match(lidar.get_last_scan(), slam_offset, slam_angle);
+        ghslam.perform_match(lidar.get_last_scan(), match_offset, match_angle);
 
 #if 0
         if ((abs(slam_offset.x) > 3) || (abs(slam_offset.y) > 3) || (abs(slam_angle) > 3.0))
@@ -469,26 +477,40 @@ void vroom(void)
         }
 #endif
 
+        // init image output with source floorplan
         img_orig.copyTo(img_viewer);
-        Rect mroi = { {0,0}, ghslam.m_img_mask.size() };
-#if 0 // mask ???
-        ghslam.m_img_mask.copyTo(img_viewer(mroi));
-#else
+
+        // show latest LIDAR scan in upper left
+        Rect mroi = { {0,0}, ghslam.m_img_scan.size() };
         ghslam.m_img_scan.copyTo(img_viewer(mroi));
-#endif
-        Rect mroi0 = { {0,410}, ghslam.m_img_template_0.size() };
-        ghslam.m_img_template_0.copyTo(img_viewer(mroi0));
 
-        lidar.draw_last_scan(img_viewer);
+        // show latest 0 degree template in middle left
+        Rect mroi0 = { {0,410}, ghslam.m_img_template_ang_0.size() };
+        ghslam.m_img_template_ang_0.copyTo(img_viewer(mroi0));
 
-        // now convert image to BGR...
+
+        // switch to BGR...
         cvtColor(img_viewer, img_viewer_bgr, COLOR_GRAY2BGR);
         
-        // draw robot position and direction in current map
-        circle(img_viewer_bgr, ghslam.m_pt0_scan, 3, SCA_GREEN, -1);
-        line(img_viewer_bgr, ghslam.m_pt0_scan, ghslam.m_pt0_scan + Point{10, 0}, SCA_GREEN, 1);
+        // draw LIDAR scan lines over floorplan
+        lidar.draw_last_scan(img_viewer_bgr, SCA_DKGRAY);
 
-        Point t0 = ghslam.m_pt0_template + Point{ 0, 410 };
+        // draw map stuff over scan lines
+        double rescale = 1.0 / ghslam.get_match_scale();
+        for (const auto& r : ghslam.get_waypoints())
+        {
+            Point qpt = r.pt;
+            qpt.x = static_cast<int>(rescale * qpt.x);
+            qpt.y = static_cast<int>(rescale * qpt.y);
+            circle(img_viewer_bgr, qpt + pt_drawing_offset, 3, SCA_BLUE, -1);
+        }
+
+        // draw robot position and direction in LIDAR scan in upper left
+        circle(img_viewer_bgr, ghslam.m_pt0_scan, 3, SCA_GREEN, -1);
+        line(img_viewer_bgr, ghslam.m_pt0_scan, ghslam.m_pt0_scan + Point{ 10, 0 }, SCA_GREEN, 1);
+
+        // draw robot position and direction in template in middle left
+        Point t0 = ghslam.m_pt0_template_ang_0 + Point{ 0, 410 };
         circle(img_viewer_bgr, t0, 3, SCA_GREEN, -1);
         line(img_viewer_bgr, t0, t0 + Point{ 10, 0 }, SCA_GREEN, 1);
 
@@ -497,6 +519,7 @@ void vroom(void)
         Point ibotpos = botpos;
         circle(img_viewer_bgr, ibotpos, r, SCA_WHITE, -1);
         circle(img_viewer_bgr, ibotpos, r, SCA_BLACK, 1);
+        circle(img_viewer_bgr, ibotpos, 7, SCA_GREEN, -1);
         Point2d angd = get_cos_sin(botang);
         int angx = static_cast<int>(angd.x * r * 0.8);
         int angy = static_cast<int>(angd.y * r * 0.8);
@@ -504,15 +527,15 @@ void vroom(void)
 
         {
             std::ostringstream oss;
-            oss << " ROOM = " << std::setw(4) << ibotpos.x << ", " << ibotpos.y;
+            oss << " IMG:XY = " << std::setw(4) << ibotpos.x << ", " << ibotpos.y;
             oss << "  " << std::fixed << std::setprecision(1) << botang;
             putText(img_viewer_bgr, oss.str(), { 0, 360 }, FONT_HERSHEY_PLAIN, 2.0, SCA_BLACK, 2);
         }
 
         {
             std::ostringstream oss;
-            oss << " SLAM = " << std::setw(4) << slam_offset.x << ", " << slam_offset.y;
-            oss << "  " << std::fixed << std::setprecision(1) << slam_angle;
+            oss << " MATCH = " << std::setw(4) << match_offset.x << ", " << match_offset.y;
+            oss << "  " << std::fixed << std::setprecision(1) << match_angle;
             putText(img_viewer_bgr, oss.str(), { 0, 385 }, FONT_HERSHEY_PLAIN, 2.0, SCA_BLUE, 2);
         }
 
@@ -522,22 +545,20 @@ void vroom(void)
         // handle keyboard events and end when ESC is pressed
         is_running = wait_and_check_keys(25);
 
-        if ((vv == 4) || (vv == 9))
+        if ((iivel == RO_VEL_FORWARD) || (iivel == RO_VEL_STOP))
         {
-            // forward or stop
-            botvelmag = (vv == 4) ? 1.5 : 0.0;
+            botvelmag = (iivel == RO_VEL_FORWARD) ? 1.5 : 0.0;
             botangvel = 0.0;
         }
         else
         {
             // spin in place
             botvelmag = 0.0;
-            botangvel = velcomp[vv];
+            botangvel = g_velcomp[iivel];
         }
         
         Point2d dpos = get_cos_sin(botang) * botvelmag;
         botpos += dpos;
-
         botang += botangvel;
         if (botang >= 360.0) botang -= 360.0;
         if (botang < 0.0) botang += 360.0;

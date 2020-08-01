@@ -43,7 +43,7 @@ namespace cpoz
 
         void run_scan(void);        ///< simulate a scan with noise
         
-        void draw_last_scan(cv::Mat& rimg) const;
+        void draw_last_scan(cv::Mat& rimg, const cv::Scalar& rcolor) const;
 
         const std::vector<double>& get_last_scan(void) const { return last_scan; }
 

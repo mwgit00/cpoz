@@ -68,7 +68,7 @@ namespace cpoz
     }
 
 
-    void FakeLidar::draw_last_scan(cv::Mat& rimg) const
+    void FakeLidar::draw_last_scan(cv::Mat& rimg, const cv::Scalar& rcolor) const
     {
         for (size_t nn = 0; nn < last_scan.size(); nn++)
         {
@@ -81,8 +81,8 @@ namespace cpoz
             // skip scan ray facing backward as visual indicator of scan orientation
             if (nn != last_scan.size() / 2)
             {
-                line(rimg, world_pos, { world_pos.x + dx, world_pos.y + dy }, 64);
-                circle(rimg, { world_pos.x + dx, world_pos.y + dy }, 3, 64, -1);
+                line(rimg, world_pos, { world_pos.x + dx, world_pos.y + dy }, rcolor);
+                circle(rimg, { world_pos.x + dx, world_pos.y + dy }, 3, rcolor, -1);
             }
         }
     }
