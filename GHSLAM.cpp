@@ -35,7 +35,7 @@ namespace cpoz
 
     constexpr int PAD_BORDER = 31;              // big enough so rotation doesn't chop off pixels
     constexpr size_t GMARR_SZ = 61;             // big enough to provide enough angle resolution
-    constexpr double ANG_STEP_SEARCH = 1.0;     // degrees
+    constexpr double ANG_STEP_SEARCH = 0.5;     // degrees
     constexpr double ANG_STEP_LIDAR = 1.0;      // degrees
     constexpr double MAX_RNG_LIDAR = 1200.0;    // 12m
 
@@ -43,7 +43,7 @@ namespace cpoz
     GHSLAM::GHSLAM() :
         slam_loc({ 0, 0 }),
         slam_ang(0.0),
-        mscale(0.125),
+        mscale(0.25),
         m_mask_line_width(1)
     {
         gmarr.resize(GMARR_SZ);
@@ -53,7 +53,7 @@ namespace cpoz
         // higher angle step seems to provide better rotation match
         for (auto& rgm : gmarr)
         {
-            rgm.init(1, -1, 0.2, 8.0);
+            rgm.init(1, 3, 0.2, 8.0);
         }
 
         // cheap COTS LIDAR:  8000 samples/s, 2Hz-10Hz ???
@@ -133,8 +133,8 @@ namespace cpoz
             {
                 Point2d& rpt2d = rcs[nn];
                 double mag = rscan[nn] * mscale;
-                int dx = static_cast<int>(rpt2d.x * mag);
-                int dy = static_cast<int>(rpt2d.y * mag);
+                int dx = static_cast<int>((rpt2d.x * mag) + 0.5);
+                int dy = static_cast<int>((rpt2d.y * mag) + 0.5);
                 pts[nn] = { dx, dy };
             }
             

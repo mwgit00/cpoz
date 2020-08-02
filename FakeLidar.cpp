@@ -73,8 +73,8 @@ namespace cpoz
         for (size_t nn = 0; nn < last_scan.size(); nn++)
         {
             double mag = last_scan[nn];
-            int dx = static_cast<int>(jitter_cos_sin[nn].x * mag);
-            int dy = static_cast<int>(jitter_cos_sin[nn].y * mag);
+            int dx = static_cast<int>((jitter_cos_sin[nn].x * mag) + 0.5);
+            int dy = static_cast<int>((jitter_cos_sin[nn].y * mag) + 0.5);
 
             // draw ray from real-world position
             // use noisy measurements for angle and length of ray

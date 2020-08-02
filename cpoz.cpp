@@ -391,24 +391,25 @@ void vroom(void)
 
     // various starting positions in default floorplan
     std::vector<Point2d> vhomepos;
-    vhomepos.push_back({ 870.0, 360.0 });
-    vhomepos.push_back({ 930.0, 630.0 });
-    vhomepos.push_back({ 1140.0, 110.0 });
-    vhomepos.push_back({ 1180.0, 440.0 });
-    vhomepos.push_back({ 560.0, 540.0 });
-    vhomepos.push_back({ 650.0, 140.0 });
+    //vhomepos.push_back({ 870.0, 360.0 });
+    //vhomepos.push_back({ 930.0, 630.0 });
+    //vhomepos.push_back({ 1140.0, 110.0 });
+    //vhomepos.push_back({ 1180.0, 440.0 });
+    vhomepos.push_back({ 560.0, 360.0 });
+    //vhomepos.push_back({ 560.0, 540.0 });
+    //vhomepos.push_back({ 650.0, 140.0 });
     size_t iivhomepos = 0;
 
     // robot state
-    Point2d botpos;
-    double botang;
-    Point2d botvel;
-    double botvelmag;
-    double botangvel;
+    Point2d botpos = { 0.0, 0.0 };
+    double botang = 0.0;
+    Point2d botvel = { 0.0, 0.0 };
+    double botvelmag = 0.0;
+    double botangvel = 0.0;
 
     Point pt_drawing_offset;
 
-#if 0
+#if 1
     // really noisy LIDAR
     lidar.jitter_angle_deg_u = 0.5;
     lidar.jitter_range_cm_u = 4.0;
@@ -425,8 +426,30 @@ void vroom(void)
 
     while (is_running)
     {
+        // handle keyboard events and end when ESC is pressed
+        is_running = wait_and_check_keys(25);
+
+        if ((iivel == RO_VEL_FORWARD) || (iivel == RO_VEL_STOP))
+        {
+            botvelmag = (iivel == RO_VEL_FORWARD) ? 1.5 : 0.0;
+            botangvel = 0.0;
+        }
+        else
+        {
+            // spin in place
+            botvelmag = 0.0;
+            botangvel = g_velcomp[iivel];
+        }
+
+        Point2d dpos = get_cos_sin(botang) * botvelmag;
+        botpos += dpos;
+        botang += botangvel;
+        if (botang >= 360.0) botang -= 360.0;
+        if (botang < 0.0) botang += 360.0;
+
         if (is_rehome)
         {
+            // one-shot keypress
             is_rehome = false;
 
             // reset offset for drawing map info
@@ -457,13 +480,37 @@ void vroom(void)
         lidar.set_ang(botang);
         lidar.run_scan();
 
+        std::vector<Point> vpt;
+        std::vector<cv::Point> last_scan_xy;        ///< last result from run_scan (relative x,y)
+
+        for (const auto& r : lidar.get_last_scan())
+        {
+            //vpt.push_back({ r.x, r.y });
+        }
+        RotatedRect rrect = minAreaRect(lidar.get_last_scan());
+
         //if ((ticker % 10) == 0)
         if (is_resync)
         {
             // apply latest scan as new waypoint
             ghslam.update_scan_templates(lidar.get_last_scan());
-            slam_offset += match_offset;
+
+            Point p0 = match_offset;
+            Point roffset;
+            double rang_rad = (slam_angle) * CV_PI / 180.0;
+            double cos0 = cos(rang_rad);
+            double sin0 = sin(rang_rad);
+#if 0
+            roffset.x = static_cast<int>(p0.x * cos0 - p0.y * sin0);
+            roffset.y = static_cast<int>(p0.x * sin0 + p0.y * cos0);
+#else
+            roffset.x = static_cast<int>(p0.x * cos0 + p0.y * sin0);
+            roffset.y = static_cast<int>(-p0.x * sin0 + p0.y * cos0);
+#endif
+
+            slam_offset += roffset;// match_offset;
             slam_angle += match_angle;
+
             ghslam.m_waypoints.push_back({ slam_offset, slam_angle, lidar.get_last_scan() });
             is_resync = false;
         }
@@ -479,7 +526,7 @@ void vroom(void)
 
         // init image output with source floorplan
         img_orig.copyTo(img_viewer);
-
+#if 1
         // show latest LIDAR scan in upper left
         Rect mroi = { {0,0}, ghslam.m_img_scan.size() };
         ghslam.m_img_scan.copyTo(img_viewer(mroi));
@@ -487,24 +534,14 @@ void vroom(void)
         // show latest 0 degree template in middle left
         Rect mroi0 = { {0,410}, ghslam.m_img_template_ang_0.size() };
         ghslam.m_img_template_ang_0.copyTo(img_viewer(mroi0));
-
+#endif
 
         // switch to BGR...
         cvtColor(img_viewer, img_viewer_bgr, COLOR_GRAY2BGR);
         
         // draw LIDAR scan lines over floorplan
         lidar.draw_last_scan(img_viewer_bgr, SCA_DKGRAY);
-
-        // draw map stuff over scan lines
-        double rescale = 1.0 / ghslam.get_match_scale();
-        for (const auto& r : ghslam.get_waypoints())
-        {
-            Point qpt = r.pt;
-            qpt.x = static_cast<int>(rescale * qpt.x);
-            qpt.y = static_cast<int>(rescale * qpt.y);
-            circle(img_viewer_bgr, qpt + pt_drawing_offset, 3, SCA_BLUE, -1);
-        }
-
+#if 1
         // draw robot position and direction in LIDAR scan in upper left
         circle(img_viewer_bgr, ghslam.m_pt0_scan, 3, SCA_GREEN, -1);
         line(img_viewer_bgr, ghslam.m_pt0_scan, ghslam.m_pt0_scan + Point{ 10, 0 }, SCA_GREEN, 1);
@@ -513,7 +550,7 @@ void vroom(void)
         Point t0 = ghslam.m_pt0_template_ang_0 + Point{ 0, 410 };
         circle(img_viewer_bgr, t0, 3, SCA_GREEN, -1);
         line(img_viewer_bgr, t0, t0 + Point{ 10, 0 }, SCA_GREEN, 1);
-
+#endif
         // now draw robot in floorplan
         const int r = 20;
         Point ibotpos = botpos;
@@ -524,6 +561,16 @@ void vroom(void)
         int angx = static_cast<int>(angd.x * r * 0.8);
         int angy = static_cast<int>(angd.y * r * 0.8);
         line(img_viewer_bgr, ibotpos, ibotpos + Point{ angx, angy }, SCA_GREEN, 3);
+
+        // lastly draw map stuff
+        double rescale = 1.0 / ghslam.get_match_scale();
+        for (const auto& r : ghslam.get_waypoints())
+        {
+            Point qpt = r.pt;
+            qpt.x = static_cast<int>(rescale * qpt.x);
+            qpt.y = static_cast<int>(rescale * qpt.y);
+            circle(img_viewer_bgr, qpt + pt_drawing_offset, 4, SCA_BLUE, -1);
+        }
 
         {
             std::ostringstream oss;
@@ -541,27 +588,6 @@ void vroom(void)
 
         // show the BGR image
         image_output(img_viewer_bgr);
-
-        // handle keyboard events and end when ESC is pressed
-        is_running = wait_and_check_keys(25);
-
-        if ((iivel == RO_VEL_FORWARD) || (iivel == RO_VEL_STOP))
-        {
-            botvelmag = (iivel == RO_VEL_FORWARD) ? 1.5 : 0.0;
-            botangvel = 0.0;
-        }
-        else
-        {
-            // spin in place
-            botvelmag = 0.0;
-            botangvel = g_velcomp[iivel];
-        }
-        
-        Point2d dpos = get_cos_sin(botang) * botvelmag;
-        botpos += dpos;
-        botang += botangvel;
-        if (botang >= 360.0) botang -= 360.0;
-        if (botang < 0.0) botang += 360.0;
     }
 
     // when everything is done, release the capture device and windows
