@@ -43,21 +43,22 @@ namespace cpoz
 
         void run_scan(void);        ///< simulate a scan with noise
         
+        void draw_floorplan(const std::string& rspath) const;
+
         void draw_last_scan(cv::Mat& rimg, const cv::Scalar& rcolor) const;
 
         const std::vector<double>& get_last_scan(void) const { return last_scan; }
 
     public:
         
-        ///< power of 10 (1,10,100, etc.), power is digits after decimal pt.
-        int range_dec_pt_adjust;
+        int range_dec_pt_adjust;    ///< power of 10 (1,10,100, etc.), power is digits after decimal pt.
         
         double jitter_range_cm_u;   ///< indiv. range measurement jitter, default +-0.2cm
         double jitter_angle_deg_u;  ///< indiv. measurement angle jitter, default +-0.25deg
         double jitter_sync_deg_u;   ///< sync angle jitter, default +-0.25deg
 
-        bool is_angle_noise_enabled;
-        bool is_range_noise_enabled;
+        bool is_angle_noise_enabled;    ///< enable angle jitter for each measurement
+        bool is_range_noise_enabled;    ///< enable range jitter for each measurement
         
     private:
         
