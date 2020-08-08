@@ -126,7 +126,9 @@ namespace cpoz
         if (rscan.size() == rcs.size())
         {
             std::vector<Point> pts;
+            std::vector<double> angs;
             pts.resize(rscan.size());
+            angs.resize(rscan.size());
 
             // project all measurements using ideal measurement angles
             for (size_t nn = 0; nn < rscan.size(); nn++)
@@ -150,14 +152,7 @@ namespace cpoz
                 Point ptnew = { pts[nn].x - r.x + PAD_BORDER, pts[nn].y - r.y + PAD_BORDER };
                 pts[nn] = ptnew;
             }
-#if 0 // mask ???
-            // put points into a contour data structure
-            // and then draw them into the image as filled blob
-            std::vector<std::vector<Point>> cc;
-            cc.push_back(pts);
-            drawContours(rimg, cc, 0, 255, cv::FILLED);
-#endif
-            // (generate a mask image ???)
+
             // draw representation of the scan...
             // draw lines between scan points but filter out any that are too long
             // this creates an image that will eliminate lots of useless contour points
@@ -168,21 +163,18 @@ namespace cpoz
             {
                 Point pt0 = pts[nn];
                 Point pt1 = pts[(nn + 1) % pts.size()];
-                Point ptdiff = pt0 - pt1;
-                double r = sqrt(ptdiff.x * ptdiff.x + ptdiff.y * ptdiff.y);
+                double dx = pt1.x - pt0.x;
+                double dy = pt1.y - pt0.y;
+                double r = sqrt((dx * dx) + (dy * dy));
+                double ang = (atan2(dy, dx) * 180.0) / CV_PI;
+                angs[nn] = (ang < 0.0) ? ang + 360.0 : ang;
+
                 if (r < len_thr)
                 {
-#if 0 // mask ???
-                    line(rimgmask, pt0, pt1, 255, m_mask_line_width);
-#endif
                     line(rimg, pt0, pt1, 255, m_mask_line_width);
                 }
             }
 
-#if 0
-            // pre-blur prior to matching (optional)
-            GaussianBlur(rimg, rimg, { 3, 3 }, 0.0, 0.0);
-#endif
             // finally note the sensing point in the scan image
             rpt0 = { 0 - r.x + PAD_BORDER, 0 - r.y + PAD_BORDER };
         }

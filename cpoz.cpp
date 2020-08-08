@@ -396,8 +396,8 @@ void vroom(void)
     //vhomepos.push_back({ 1140.0, 110.0 });
     //vhomepos.push_back({ 1180.0, 440.0 });
     vhomepos.push_back({ 560.0, 360.0 });
-    //vhomepos.push_back({ 560.0, 540.0 });
-    //vhomepos.push_back({ 650.0, 140.0 });
+    vhomepos.push_back({ 560.0, 540.0 });
+    vhomepos.push_back({ 650.0, 140.0 });
     size_t iivhomepos = 0;
 
     // robot state
@@ -409,7 +409,7 @@ void vroom(void)
 
     Point pt_drawing_offset;
 
-#if 1
+#if 0
     // really noisy LIDAR
     lidar.jitter_angle_deg_u = 0.5;
     lidar.jitter_range_cm_u = 4.0;
@@ -487,7 +487,7 @@ void vroom(void)
         {
             //vpt.push_back({ r.x, r.y });
         }
-        RotatedRect rrect = minAreaRect(lidar.get_last_scan());
+        //RotatedRect rrect = minAreaRect(lidar.get_last_scan());
 
         //if ((ticker % 10) == 0)
         if (is_resync)
