@@ -52,7 +52,8 @@ namespace cpoz
     void FakeLidar::load_floorplan(const std::string& rspath)
     {
         // room should be a solid blob
-        // "inside" pixels are black or gray, background is white
+        // "inside" pixels are black or gray
+        // background is white and interior obstacles are white
         img_floorplan = imread(rspath, IMREAD_GRAYSCALE);
         Mat img_binary = (img_floorplan < 240);
 
@@ -70,8 +71,14 @@ namespace cpoz
     }
 
 
-    void FakeLidar::draw_last_scan(cv::Mat& rimg, const cv::Scalar& rcolor) const
+    void FakeLidar::draw_last_scan(
+        cv::Mat& rimg,
+        const std::vector<double>& rvang,
+        const cv::Scalar& rcolor) const
     {
+        // see if angle overlay array is valid
+        bool is_ang_ok = (rvang.size() == last_scan.size());
+
         for (size_t nn = 0; nn < last_scan.size(); nn++)
         {
             double mag = last_scan[nn];
@@ -80,10 +87,27 @@ namespace cpoz
 
             // draw ray from real-world position
             // use noisy measurements for angle and length of ray
-            // skip scan ray facing backward as visual indicator of scan orientation
-            if (nn != last_scan.size() / 2)
+            line(rimg, world_pos, { world_pos.x + dx, world_pos.y + dy }, rcolor);
+
+            if (is_ang_ok)
             {
-                line(rimg, world_pos, { world_pos.x + dx, world_pos.y + dy }, rcolor);
+                // ignore negative angles
+                if (rvang[nn] >= 0.0)
+                {
+                    // draw dot with line in direction of angle
+                    const double mag = 10.0;
+                    double ang = rvang[nn] * CV_PI / 180.0;
+                    int iadx = static_cast<int>((cos(ang) * mag) + 0.5);
+                    int iady = static_cast<int>((sin(ang) * mag) + 0.5);
+                    Point pt0 = { world_pos.x + dx, world_pos.y + dy };
+                    Point pt1 = { world_pos.x + dx + iadx, world_pos.y + dy + iady };
+                    circle(rimg, pt0, 3, { 255, 255, 0 }, -1);
+                    line(rimg, pt0, pt1, { 255, 255, 0 }, 2);
+                }
+            }
+            else
+            {
+                // no angle info so just draw a dot
                 circle(rimg, { world_pos.x + dx, world_pos.y + dy }, 3, rcolor, -1);
             }
         }

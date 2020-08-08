@@ -45,7 +45,10 @@ namespace cpoz
         
         void draw_floorplan(const std::string& rspath) const;
 
-        void draw_last_scan(cv::Mat& rimg, const cv::Scalar& rcolor) const;
+        void draw_last_scan(
+            cv::Mat& rimg,
+            const std::vector<double>& rvang,
+            const cv::Scalar& rcolor) const;
 
         const std::vector<double>& get_last_scan(void) const { return last_scan; }
 

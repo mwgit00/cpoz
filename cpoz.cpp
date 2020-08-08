@@ -41,7 +41,6 @@
 
 #include "FakeLidar.h"
 #include "GHSLAM.h"
-#include "GradientMatcher.h"
 
 using namespace cv;
 
@@ -381,7 +380,6 @@ void vroom(void)
 
     cpoz::GHSLAM ghslam;
     cpoz::FakeLidar lidar;
-    ghalgo::GradientMatcher gm;
 
     Point slam_offset = { 0,0 };
     double slam_angle = 0.0;
@@ -453,7 +451,9 @@ void vroom(void)
             is_rehome = false;
 
             // reset offset for drawing map info
-            pt_drawing_offset = { static_cast<int>(vhomepos[iivhomepos].x), static_cast<int>(vhomepos[iivhomepos].y) };
+            pt_drawing_offset = {
+                static_cast<int>(vhomepos[iivhomepos].x),
+                static_cast<int>(vhomepos[iivhomepos].y) };
             
             // clear map and start at 0
             // and set flag for a resync to add first waypoint to new map
@@ -480,14 +480,10 @@ void vroom(void)
         lidar.set_ang(botang);
         lidar.run_scan();
 
+        ghslam.preprocess_scan(61 / 2, lidar.get_last_scan());
+        
         std::vector<Point> vpt;
         std::vector<cv::Point> last_scan_xy;        ///< last result from run_scan (relative x,y)
-
-        for (const auto& r : lidar.get_last_scan())
-        {
-            //vpt.push_back({ r.x, r.y });
-        }
-        //RotatedRect rrect = minAreaRect(lidar.get_last_scan());
 
         //if ((ticker % 10) == 0)
         if (is_resync)
@@ -515,7 +511,7 @@ void vroom(void)
             is_resync = false;
         }
 
-        ghslam.perform_match(lidar.get_last_scan(), match_offset, match_angle);
+        //ghslam.perform_match(lidar.get_last_scan(), match_offset, match_angle);
 
 #if 0
         if ((abs(slam_offset.x) > 3) || (abs(slam_offset.y) > 3) || (abs(slam_angle) > 3.0))
@@ -527,24 +523,39 @@ void vroom(void)
         // init image output with source floorplan
         img_orig.copyTo(img_viewer);
 #if 1
+        Mat foo;
+        Point foopt;
+        ghslam.draw_preprocessed_scan(foo, foopt);
+
         // show latest LIDAR scan in upper left
-        Rect mroi = { {0,0}, ghslam.m_img_scan.size() };
-        ghslam.m_img_scan.copyTo(img_viewer(mroi));
+        Rect mroi = { {0,0}, foo.size() };
+        foo.copyTo(img_viewer(mroi));
 
         // show latest 0 degree template in middle left
         Rect mroi0 = { {0,410}, ghslam.m_img_template_ang_0.size() };
-        ghslam.m_img_template_ang_0.copyTo(img_viewer(mroi0));
+        //ghslam.m_img_template_ang_0.copyTo(img_viewer(mroi0));
 #endif
 
         // switch to BGR...
         cvtColor(img_viewer, img_viewer_bgr, COLOR_GRAY2BGR);
         
+        std::vector<double> vang;
+        vang.resize(lidar.get_last_scan().size());
+        for (size_t nn = 0; nn < vang.size(); nn++)
+        {
+            vang[nn] = ghslam.m_preproc[nn].ang;
+            if (ghslam.m_preproc[nn].flags == 0)
+            {
+                vang[nn] = -1.0;
+            }
+        }
+        
         // draw LIDAR scan lines over floorplan
-        lidar.draw_last_scan(img_viewer_bgr, SCA_DKGRAY);
+        lidar.draw_last_scan(img_viewer_bgr, vang, SCA_DKGRAY);
 #if 1
         // draw robot position and direction in LIDAR scan in upper left
-        circle(img_viewer_bgr, ghslam.m_pt0_scan, 3, SCA_GREEN, -1);
-        line(img_viewer_bgr, ghslam.m_pt0_scan, ghslam.m_pt0_scan + Point{ 10, 0 }, SCA_GREEN, 1);
+        circle(img_viewer_bgr, foopt, 3, SCA_GREEN, -1);
+        line(img_viewer_bgr, foopt, foopt + Point{ 10, 0 }, SCA_GREEN, 1);
 
         // draw robot position and direction in template in middle left
         Point t0 = ghslam.m_pt0_template_ang_0 + Point{ 0, 410 };
@@ -601,9 +612,6 @@ int main()
 {
     std::cout << stitle << std::endl;
     //cpoz::CameraHelper cam;
-    cpoz::GHSLAM ghslam;
-    cpoz::FakeLidar lidar;
-    ghalgo::GradientMatcher gm;
     //cam.cal(".\\calib_02");
     //test_room1();
     //test_room2();
@@ -611,78 +619,4 @@ int main()
 
     vroom();
     return 0;
-
-    Size matchsz;
-    gm.init(1, 7, 0.5, 8.0);
-
-#if 0
-    lidar.jitter_angle_deg_u = 0.5;// 1.0;
-    lidar.jitter_range_cm_u = 4.0;// 4.0;
-    lidar.jitter_sync_deg_u = 0.5;// 1.0;
-#endif
-    lidar.set_scan_angs(ghslam.get_scan_angs());
-    lidar.load_floorplan(".\\docs\\apt_1cmpp.png");
-
-    Point ptworld = { 400, 400 };
-    Point pt0_scan;
-    
-    Point tpt0_scan;
-    Point tpt0_offset;
-    Point tpt0_mid;
-    
-    Point tptq_scan;
-    Point tptq_offset;
-    Point tptq_mid;
-    
-    Size tsz0;
-
-    for (int i = 0; i < 5; i++)
-    {
-        Mat img_scan;
-        Mat img_room;
-        Mat img_mask;
-        std::vector<double> vscan;
-
-        Point slam_offset;
-        double slam_angle;
-
-        std::ostringstream oss;
-        oss << "_" << i << ".png";
-        
-        // update real position that is known only to fake LIDAR
-        Point scoot = { i * 30, i * 5 };
-        lidar.set_pos(ptworld + scoot);
-
-        // get a scan from LIDAR and convert to 2D blob image
-        lidar.run_scan();
-
-        if (i == 0)
-        {
-            ghslam.update_scan_templates(lidar.get_last_scan());
-        }
-        
-        {
-            ghslam.perform_match(lidar.get_last_scan(), slam_offset, slam_angle);
-#if 0
-            Mat igradn;
-            Mat imatchn;
-            normalize(igrad, igradn, 0, 255, NORM_MINMAX);
-            normalize(imatch, imatchn, 0, 65535, NORM_MINMAX);
-            imwrite("zzghg" + oss.str(), igradn);
-            imwrite("zzghm" + oss.str(), imatchn);
-#endif
-//            ptmax_offset = ptmax - tptq_mid;
-  //          Point slam_offset = tptq_offset - tpt0_offset - ptmax_offset;
-        }
-
-        ghslam.update_scan_templates(lidar.get_last_scan());
-//        lidar.draw_last_scan(img_room);
-        imwrite("zzroom" + oss.str(), img_room);
-
-        // note scan point and image center point
-        //circle(img_scan, pt0_scan, 3, 0, -1);
-        //circle(img_scan, { img_scan.size().width / 2, img_scan.size().height / 2 }, 3, 128, -1);
-        //imwrite("zzscan" + oss.str(), img_scan);
-        //imwrite("zzmask" + oss.str(), img_mask);
-    }
 }

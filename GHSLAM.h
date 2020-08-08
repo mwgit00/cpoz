@@ -25,21 +25,28 @@
 
 #include <vector>
 #include <list>
-#include "GradientMatcher.h"
 
 namespace cpoz
 {
-    typedef struct _T_GHSLAM_WAYPOINT_struct
-    {
-        cv::Point pt;               ///< best-guess location of scan
-        double ang;                 ///< best-guress orientation of scan
-        std::vector<double> scan;   ///< original scan data
-    } T_GHSLAM_WAYPOINT;
-    
-    
     class GHSLAM
     {
     public:
+
+        typedef struct _T_SAMPLE_struct
+        {
+            cv::Point pt;
+            double ang;
+            double range;
+            uint32_t flags;
+        } T_SAMPLE;
+
+        typedef struct _T_GHSLAM_WAYPOINT_struct
+        {
+            cv::Point pt;               ///< best-guess location of scan
+            double ang;                 ///< best-guress orientation of scan
+            std::vector<double> scan;   ///< original scan data
+        } T_WAYPOINT;
+
         GHSLAM();
         virtual ~GHSLAM();
 
@@ -54,12 +61,21 @@ namespace cpoz
         
         const std::vector<double>& get_scan_angs(void) const;
 
-        void scan_to_img(
+        void scan_to_img2(
             cv::Mat& rimg,
-            cv::Mat& rimgmask,
             cv::Point& rpt0,
-            const size_t offset_index,
+            const double scale,
             const std::vector<double>& rscan);
+
+        void preprocess_scan(
+            const size_t offset_index,
+            const std::vector<double>& rscan,
+            const double scale = 1.0);
+
+        void draw_preprocessed_scan(
+            cv::Mat& rimg,
+            cv::Point& rpt0,
+            const int shrink = 4);
 
         void update_scan_templates(const std::vector<double>& rscan);
 
@@ -68,9 +84,9 @@ namespace cpoz
             cv::Point& roffset,
             double& rang);
 
-        void add_waypoint(cpoz::T_GHSLAM_WAYPOINT& rwp);
+        void add_waypoint(GHSLAM::T_WAYPOINT& rwp);
 
-        const std::list<T_GHSLAM_WAYPOINT>& get_waypoints(void) const { return m_waypoints; }
+        const std::list<GHSLAM::T_WAYPOINT>& get_waypoints(void) const { return m_waypoints; }
 
     public:
 
@@ -82,7 +98,10 @@ namespace cpoz
         cv::Mat m_img_template_ang_0;   // 0 degree match template for display
         cv::Point m_pt0_template_ang_0; // center of 0 degree match template for display
 
-        std::list<T_GHSLAM_WAYPOINT> m_waypoints;
+        std::list<T_WAYPOINT> m_waypoints;
+
+        std::vector<GHSLAM::T_SAMPLE> m_preproc;
+        cv::Rect m_preproc_bbox;
 
     private:
 
@@ -96,7 +115,6 @@ namespace cpoz
         std::vector<double> scan_angs_offsets;  ///< offsets for angle search
         std::vector<std::vector<cv::Point2d>> scan_cos_sin; ///< ideal cos and sin for scan angles
 
-        std::vector<ghalgo::GradientMatcher> gmarr; ///< array of matchers for orientation search
         std::vector<cv::Point> tpt0_offset;         ///< center points for all templates
     };
 }
