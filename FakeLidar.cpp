@@ -89,6 +89,8 @@ namespace cpoz
             // use noisy measurements for angle and length of ray
             line(rimg, world_pos, { world_pos.x + dx, world_pos.y + dy }, rcolor);
 
+            // if angle info has been provided then draw dot and line
+            // representing surface angle at the measurement point
             if (is_ang_ok)
             {
                 // ignore negative angles

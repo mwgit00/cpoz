@@ -33,7 +33,7 @@ namespace cpoz
 {
     using namespace cv;
 
-    const int PAD_BORDER = 31;              // big enough so rotation doesn't chop off pixels
+    const int PAD_BORDER = 25;              // add some space around border of scan images
     const size_t GMARR_SZ = 61;             // big enough to provide enough angle resolution
     const double ANG_STEP_SEARCH = 0.5;     // degrees
     const double ANG_STEP_LIDAR = 1.0;      // degrees
@@ -42,8 +42,7 @@ namespace cpoz
     GHSLAM::GHSLAM() :
         slam_loc({ 0, 0 }),
         slam_ang(0.0),
-        mscale(0.25),
-        m_mask_line_width(1)
+        mscale(0.25)
     {
         tpt0_offset.resize(GMARR_SZ);
 
@@ -106,65 +105,6 @@ namespace cpoz
     }
 
 
-    void GHSLAM::scan_to_img2(
-        cv::Mat& rimg,
-        cv::Point& rpt0,
-        const double scale,
-        const std::vector<double>& rscan)
-    {
-        std::vector<Point2d>& rcs = scan_cos_sin[GMARR_SZ / 2];
-
-        if (rscan.size() == rcs.size())
-        {
-            std::vector<Point> pts;
-            pts.resize(rscan.size());
-
-            // project all measurements using ideal measurement angles
-            for (size_t nn = 0; nn < rscan.size(); nn++)
-            {
-                Point2d& rpt2d = rcs[nn];
-                double mag = rscan[nn] * scale;
-                int dx = static_cast<int>((rpt2d.x * mag) + 0.5);
-                int dy = static_cast<int>((rpt2d.y * mag) + 0.5);
-                pts[nn] = { dx, dy };
-            }
-
-            // get bounding box around measurement points
-            // shift points so they will be centered in image
-            Rect r = boundingRect(pts);
-            for (size_t nn = 0; nn < pts.size(); nn++)
-            {
-                Point ptnew = { pts[nn].x - r.x + PAD_BORDER, pts[nn].y - r.y + PAD_BORDER };
-                pts[nn] = ptnew;
-            }
-
-            // create image same size as bounding box along with some padding
-            Size imgsz = Size(r.width + (2 * PAD_BORDER), r.height + (2 * PAD_BORDER));
-            rimg = Mat::zeros(imgsz, CV_8UC1);
-
-            // draw representation of the scan...
-            // draw lines between scan points but filter out any that are too long
-            // the threshold is distance between two measurements at max LIDAR range
-            double len_thr = MAX_RNG_LIDAR * mscale * tan(ANG_STEP_LIDAR * CV_PI / 180.0);
-            for (size_t nn = 0; nn < pts.size(); nn++)
-            {
-                Point pt0 = pts[nn];
-                Point pt1 = pts[(nn + 1) % pts.size()];
-                double dx = pt1.x - pt0.x;
-                double dy = pt1.y - pt0.y;
-                double r = sqrt((dx * dx) + (dy * dy));
-                if (r < len_thr)
-                {
-                    line(rimg, pt0, pt1, 255, m_mask_line_width);
-                }
-            }
-
-            // finally note the sensing point in the scan image
-            rpt0 = { 0 - r.x + PAD_BORDER, 0 - r.y + PAD_BORDER };
-        }
-    }
-
-
     void GHSLAM::preprocess_scan(
         const size_t offset_index,
         const std::vector<double>& rscan,
@@ -175,10 +115,8 @@ namespace cpoz
         
         if (rscan.size() == m_preproc.size())
         {
-            int imaxx = INT_MIN;
-            int iminx = INT_MAX;
-            int imaxy = INT_MIN;
-            int iminy = INT_MAX;
+            Point ptmin = { INT_MAX, INT_MAX };
+            Point ptmax = { INT_MIN, INT_MIN };
 
             // project all measurements using ideal measurement angles
             // also determine bounds of the X,Y coordinates
@@ -190,14 +128,14 @@ namespace cpoz
                 m_preproc[nn].pt = { dx, dy };
                 m_preproc[nn].range = mag;
                 
-                imaxx = max(imaxx, dx);
-                iminx = min(iminx, dx);
-                imaxy = max(imaxy, dy);
-                iminy = min(iminy, dy);
+                ptmax.x = max(ptmax.x, dx);
+                ptmin.x = min(ptmin.x, dx);
+                ptmax.y = max(ptmax.y, dy);
+                ptmin.y = min(ptmin.y, dy);
             }
 
             // set bounding box around projected points
-            m_preproc_bbox = Rect(Point(iminx, iminy), Point(imaxx, imaxy));
+            m_preproc_bbox = Rect(ptmin, ptmax);
 
             // check for adjacent points that are too far away from each other
             // they are likely not on the same surface and can be ignored
@@ -226,11 +164,9 @@ namespace cpoz
                 double rp = sqrt((dxp * dxp) + (dyp * dyp));
                 m_preproc[nn].flags = ((rp < len_thr) && (rn < len_thr)) ? 1 : 0;
             }
-
-            // finally note the sensing point in the scan image
-            //Point rpt0 = { 0 - rbox.x, 0 - rbox.y };
         }
     }
+
 
     void GHSLAM::draw_preprocessed_scan(
         cv::Mat& rimg,
@@ -254,17 +190,24 @@ namespace cpoz
             pts[nn] = ptnew;
         }
 
-        // draw lines between scan points that met "closeness" criteria
         for (size_t nn = 0; nn < m_preproc.size(); nn++)
         {
-            T_SAMPLE& rsamp0 = m_preproc[nn];
-            T_SAMPLE& rsamp1 = m_preproc[(nn + 1) % pts.size()];
-            Point pt0 = pts[nn];
-            Point pt1 = pts[(nn + 1) % pts.size()];
-
-            if (rsamp0.flags && rsamp1.flags)
+            if (false)
             {
-                line(rimg, pt0, pt1, 255, m_mask_line_width);
+                // draw lines between scan points that meet "closeness" criteria
+                T_SAMPLE& rsamp0 = m_preproc[nn];
+                T_SAMPLE& rsamp1 = m_preproc[(nn + 1) % pts.size()];
+                Point pt0 = pts[nn];
+                Point pt1 = pts[(nn + 1) % pts.size()];
+                if (rsamp0.flags && rsamp1.flags)
+                {
+                    line(rimg, pt0, pt1, 255, 1);
+                }
+            }
+            else
+            {
+                // just draw a dot
+                circle(rimg, pts[nn], 0, 255, 1);
             }
         }
 

@@ -38,8 +38,8 @@ namespace cpoz
         void load_floorplan(const std::string& rspath);
 
         void set_scan_angs(const std::vector<double>& rvec) { scan_angs = rvec; }
-        void set_pos(const cv::Point& rpt) { world_pos = rpt; }
-        void set_ang(const double ang) { this->world_ang = ang; }
+        void set_world_pos(const cv::Point& rpt) { world_pos = rpt; }
+        void set_world_ang(const double ang) { world_ang = ang; }
 
         void run_scan(void);        ///< simulate a scan with noise
         

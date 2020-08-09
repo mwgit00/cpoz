@@ -389,13 +389,13 @@ void vroom(void)
 
     // various starting positions in default floorplan
     std::vector<Point2d> vhomepos;
-    //vhomepos.push_back({ 870.0, 360.0 });
-    //vhomepos.push_back({ 930.0, 630.0 });
-    //vhomepos.push_back({ 1140.0, 110.0 });
-    //vhomepos.push_back({ 1180.0, 440.0 });
     vhomepos.push_back({ 560.0, 360.0 });
     vhomepos.push_back({ 560.0, 540.0 });
     vhomepos.push_back({ 650.0, 140.0 });
+    vhomepos.push_back({ 870.0, 360.0 });
+    vhomepos.push_back({ 930.0, 630.0 });
+    vhomepos.push_back({ 1040.0, 110.0 });
+    vhomepos.push_back({ 1180.0, 440.0 });
     size_t iivhomepos = 0;
 
     // robot state
@@ -419,7 +419,7 @@ void vroom(void)
 
     img_orig = imread(".\\docs\\apt_1cmpp_720p.png", IMREAD_GRAYSCALE);
 
-    // and the image processing loop is running...
+    // and the processing loop is running...
     bool is_running = true;
 
     while (is_running)
@@ -476,15 +476,12 @@ void vroom(void)
             if (iivhomepos == vhomepos.size()) iivhomepos = 0;
         }
 
-        lidar.set_pos(botpos);
-        lidar.set_ang(botang);
+        lidar.set_world_pos(botpos);
+        lidar.set_world_ang(botang);
         lidar.run_scan();
 
         ghslam.preprocess_scan(61 / 2, lidar.get_last_scan());
         
-        std::vector<Point> vpt;
-        std::vector<cv::Point> last_scan_xy;        ///< last result from run_scan (relative x,y)
-
         //if ((ticker % 10) == 0)
         if (is_resync)
         {
@@ -520,21 +517,22 @@ void vroom(void)
         }
 #endif
 
-        // init image output with source floorplan
+        // init image output with source floorplan (gray)
         img_orig.copyTo(img_viewer);
-#if 1
-        Mat foo;
-        Point foopt;
-        ghslam.draw_preprocessed_scan(foo, foopt);
 
-        // show latest LIDAR scan in upper left
-        Rect mroi = { {0,0}, foo.size() };
-        foo.copyTo(img_viewer(mroi));
+        // get a scaled-down "snapshot" image of current LIDAR scan (gray)
+        Mat img_current_scan;
+        Point img_current_scan_pt0;
+        ghslam.draw_preprocessed_scan(img_current_scan, img_current_scan_pt0, 3);
+
+        // show current LIDAR scan in upper left
+        Rect mroi = { {0,0}, img_current_scan.size() };
+        img_current_scan.copyTo(img_viewer(mroi));
 
         // show latest 0 degree template in middle left
         Rect mroi0 = { {0,410}, ghslam.m_img_template_ang_0.size() };
         //ghslam.m_img_template_ang_0.copyTo(img_viewer(mroi0));
-#endif
+
 
         // switch to BGR...
         cvtColor(img_viewer, img_viewer_bgr, COLOR_GRAY2BGR);
@@ -552,11 +550,11 @@ void vroom(void)
         
         // draw LIDAR scan lines over floorplan
         lidar.draw_last_scan(img_viewer_bgr, vang, SCA_DKGRAY);
-#if 1
-        // draw robot position and direction in LIDAR scan in upper left
-        circle(img_viewer_bgr, foopt, 3, SCA_GREEN, -1);
-        line(img_viewer_bgr, foopt, foopt + Point{ 10, 0 }, SCA_GREEN, 1);
 
+        // draw robot position and direction in LIDAR scan in upper left
+        circle(img_viewer_bgr, img_current_scan_pt0, 3, SCA_GREEN, -1);
+        line(img_viewer_bgr, img_current_scan_pt0, img_current_scan_pt0 + Point{ 10, 0 }, SCA_GREEN, 1);
+#if 0
         // draw robot position and direction in template in middle left
         Point t0 = ghslam.m_pt0_template_ang_0 + Point{ 0, 410 };
         circle(img_viewer_bgr, t0, 3, SCA_GREEN, -1);
@@ -584,12 +582,14 @@ void vroom(void)
         }
 
         {
+            // print robot position in image
             std::ostringstream oss;
-            oss << " IMG:XY = " << std::setw(4) << ibotpos.x << ", " << ibotpos.y;
+            oss << " IMG:XY@ = " << std::setw(4) << ibotpos.x << ", " << ibotpos.y;
             oss << "  " << std::fixed << std::setprecision(1) << botang;
             putText(img_viewer_bgr, oss.str(), { 0, 360 }, FONT_HERSHEY_PLAIN, 2.0, SCA_BLACK, 2);
         }
 
+        if (false)
         {
             std::ostringstream oss;
             oss << " MATCH = " << std::setw(4) << match_offset.x << ", " << match_offset.y;

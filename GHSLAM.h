@@ -61,12 +61,6 @@ namespace cpoz
         
         const std::vector<double>& get_scan_angs(void) const;
 
-        void scan_to_img2(
-            cv::Mat& rimg,
-            cv::Point& rpt0,
-            const double scale,
-            const std::vector<double>& rscan);
-
         void preprocess_scan(
             const size_t offset_index,
             const std::vector<double>& rscan,
@@ -109,7 +103,6 @@ namespace cpoz
         double slam_ang;    ///< calculated heading
 
         double mscale;          ///< scale for doing matching
-        int m_mask_line_width;  ///< width of lines for drawing scans
 
         std::vector<double> scan_angs;          ///< ideal scan angles
         std::vector<double> scan_angs_offsets;  ///< offsets for angle search
