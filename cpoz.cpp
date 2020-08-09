@@ -512,7 +512,7 @@ void vroom(void)
             is_resync = false;
         }
 
-        //ghslam.perform_match(lidar.get_last_scan(), match_offset, match_angle);
+        ghslam.perform_match(lidar.get_last_scan(), match_offset, match_angle);
 
 #if 0
         if ((abs(slam_offset.x) > 3) || (abs(slam_offset.y) > 3) || (abs(slam_angle) > 3.0))
@@ -534,13 +534,14 @@ void vroom(void)
         img_current_scan.copyTo(img_viewer(mroi));
 
         // show latest 0 degree template in middle left
-        Rect mroi0 = { {0,410}, ghslam.m_img_template_ang_0.size() };
+        //Rect mroi0 = { {0,410}, ghslam.m_img_template_ang_0.size() };
         //ghslam.m_img_template_ang_0.copyTo(img_viewer(mroi0));
 
 
         // switch to BGR...
         cvtColor(img_viewer, img_viewer_bgr, COLOR_GRAY2BGR);
         
+        // get a copy of the angle codes
         std::vector<uint8_t> vangcode;
         vangcode.resize(lidar.get_last_scan().size());
         for (size_t nn = 0; nn < vangcode.size(); nn++)
@@ -553,7 +554,7 @@ void vroom(void)
         }
         
         // draw LIDAR scan lines over floorplan
-        lidar.draw_last_scan(img_viewer_bgr, ghslam.get_ang_step(), vangcode, SCA_DKGRAY);
+        lidar.draw_last_scan(img_viewer_bgr, ghslam.get_angcode_ct(), vangcode, SCA_DKGRAY);
 
         // draw robot position and direction in LIDAR scan in upper left
         circle(img_viewer_bgr, img_current_scan_pt0, 3, SCA_GREEN, -1);
@@ -600,6 +601,11 @@ void vroom(void)
             oss << "  " << std::fixed << std::setprecision(1) << match_angle;
             putText(img_viewer_bgr, oss.str(), { 0, 385 }, FONT_HERSHEY_PLAIN, 2.0, SCA_BLUE, 2);
         }
+
+        Mat img_boo;
+        cvtColor(ghslam.m_img_foo, img_boo, COLOR_GRAY2BGR);
+        Rect mroix = { {0,410}, Size(105, 105) };
+        img_boo.copyTo(img_viewer_bgr(mroix));
 
         // show the BGR image
         image_output(img_viewer_bgr);

@@ -24,6 +24,7 @@
 #include "opencv2/highgui.hpp"
 
 #include <vector>
+#include <map>
 
 #include "GHSLAM.h"
 
@@ -34,8 +35,19 @@ namespace cpoz
     using namespace cv;
 
     const int PAD_BORDER = 25;              // add some space around border of scan images
-    const size_t GMARR_SZ = 61;             // big enough to provide enough angle resolution
-    const double ANG_STEP_SEARCH = 1.0;     // degrees
+
+    // cheap COTS LIDAR:  8000 samples/s, 2Hz-10Hz ???
+
+    class cmpPtByXY
+    {
+    public:
+        bool operator()(const cv::Point& a, const cv::Point& b) const
+        {
+            if (a.x == b.x)
+                return a.y < b.y;
+            return a.x < b.x;
+        }
+    };
 
     GHSLAM::GHSLAM() :
         m_scan_ang_ct(341),                 // 340 degree scan (+1 for 0 degree sample)
@@ -46,13 +58,13 @@ namespace cpoz
         slam_loc({ 0, 0 }),
         slam_ang(0.0),
         mscale(0.25),
-        m_angcode_ct(8)
+        m_angcode_ct(8),
+        m_search_ang_ct(61),
+        m_search_ang_step(1.0)              // 1 degree between each search step
     {
-        tpt0_offset.resize(GMARR_SZ);
+        tpt0_offset.resize(m_search_ang_ct);
 
-        // cheap COTS LIDAR:  8000 samples/s, 2Hz-10Hz ???
-        init_scan_angs(ANG_STEP_SEARCH, GMARR_SZ);
-
+        init_scan_angs();
     }
     
     
@@ -62,9 +74,7 @@ namespace cpoz
     }
 
 
-    void GHSLAM::init_scan_angs(
-        const double offset_step,
-        const size_t offset_ct)
+    void GHSLAM::init_scan_angs(void)
     {
         // flush old data
         scan_angs.clear();
@@ -82,8 +92,8 @@ namespace cpoz
 
         // generate lookup tables for cosine and sine
         // for a range of offsets from ideal scan angles
-        double ang_offset = -offset_step * (offset_ct / 2);
-        for (size_t nn = 0; nn < offset_ct; nn++)
+        double ang_offset = -m_search_ang_step * (m_search_ang_ct / 2);
+        for (size_t nn = 0; nn < m_search_ang_ct; nn++)
         {
             scan_angs_offsets.push_back(ang_offset);
             scan_cos_sin.push_back({});
@@ -94,17 +104,11 @@ namespace cpoz
                 scan_cos_sin.back().push_back(cv::Point2d(cos(ang_rad), sin(ang_rad)));
             }
 
-            ang_offset += offset_step;
+            ang_offset += m_search_ang_step;
         }
     }
 
     
-    const std::vector<double>& GHSLAM::get_scan_angs(void) const
-    {
-        return scan_angs;
-    }
-
-
     void GHSLAM::preprocess_scan(
         tVecSamples& rvec,
         cv::Rect& rbbox,
@@ -232,13 +236,25 @@ namespace cpoz
 
     void GHSLAM::update_match_templates(const std::vector<double>& rscan)
     {
-        const size_t sz = GMARR_SZ;
-        for (size_t ii = 0; ii < sz; ii++)
+        m_vtemplates.clear();
+        m_vtemplates.resize(m_search_ang_ct);
+        
+        for (size_t ii = 0; ii < m_search_ang_ct; ii++)
         {
-            tVecSamples vsamp;
-            cv::Rect bbox;
-            vsamp.resize(360);
-            preprocess_scan(vsamp, bbox, ii, rscan);
+            m_vtemplates[ii].vsamp.resize(m_scan_ang_ct);
+            preprocess_scan(m_vtemplates[ii].vsamp, m_vtemplates[ii].bbox, ii, rscan);
+            
+            m_vtemplates[ii].lookup.resize(m_angcode_ct);
+            
+            tVecSamples& rvec = m_vtemplates[ii].vsamp;
+            for (size_t jj = 0; jj < rvec.size(); jj++)
+            {
+                T_SAMPLE& rsamp = rvec[jj];
+                if (rsamp.is_range_ok)
+                {
+                    m_vtemplates[ii].lookup[rsamp.angcode].push_back(rsamp.pt);
+                }
+            }
         }
     }
 
@@ -248,9 +264,57 @@ namespace cpoz
         cv::Point& roffset,
         double& rang)
     {
-#if 0
-        const size_t sz = GMARR_SZ;
+        tVecSamples vsamp;
+        cv::Rect bbox;
+        vsamp.resize(m_scan_ang_ct);
 
+        const int BLOOM_BOUNDS = 50;
+        const int BLOOM_SIZE = 2;
+        const int BLOOM_PAD = BLOOM_BOUNDS + BLOOM_SIZE;
+
+        m_img_foo = Mat::zeros(BLOOM_PAD * 2 + 1, BLOOM_PAD * 2 + 1, CV_16U);
+
+        // use 0 angle
+        preprocess_scan(vsamp, bbox, m_search_ang_ct / 2, rscan);
+
+        //for (size_t jj = 0; jj < m_search_ang_ct; jj++)
+        size_t jj = m_search_ang_ct / 2;
+        {
+            T_TEMPLATE& rt = m_vtemplates[jj];
+
+            for (size_t ii = 0; ii < vsamp.size(); ii++)
+            {
+                T_SAMPLE& rs = vsamp[ii];
+
+                if (rs.is_range_ok)
+                {
+                    for (const auto& rpt : rt.lookup[rs.angcode])
+                    {
+                        Point votept = rs.pt - rpt;
+
+                        if ((abs(votept.x) < BLOOM_BOUNDS) && (abs(votept.y) < BLOOM_BOUNDS))
+                        {
+                            // bloom
+                            for (int mm = -BLOOM_SIZE; mm <= BLOOM_SIZE; mm++)
+                            {
+                                for (int nn = -BLOOM_SIZE; nn <= BLOOM_SIZE; nn++)
+                                {
+                                    int q = BLOOM_SIZE + 1 - max(abs(nn), abs(mm));
+                                    Point d = { mm, nn };
+                                    Point boo = { BLOOM_PAD, BLOOM_PAD };
+                                    Point e = votept + d + boo;
+                                    uint16_t upix = m_img_foo.at<uint16_t>(e);
+                                    upix += static_cast<uint16_t>(q);
+                                    m_img_foo.at<uint16_t>(e) = upix;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+#if 0
         // convert scan to an image (no rotation)
         draw_preprocessed_scan(m_img_scan, m_pt0_scan, sz / 2, rscan);
 

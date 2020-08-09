@@ -43,6 +43,14 @@ namespace cpoz
 
         typedef std::vector<T_SAMPLE> tVecSamples;
 
+        typedef struct _T_TEMPLATE_struct
+        {
+            tVecSamples vsamp;
+            cv::Rect bbox;
+            std::vector<std::list<cv::Point>> lookup;
+        } T_TEMPLATE;
+
+        
         typedef struct _T_GHSLAM_WAYPOINT_struct
         {
             cv::Point pt;               ///< best-guess location of scan
@@ -50,18 +58,18 @@ namespace cpoz
             std::vector<double> scan;   ///< original scan data
         } T_WAYPOINT;
 
+        
         GHSLAM();
         virtual ~GHSLAM();
 
-        void init_scan_angs(
-            const double offset_step,
-            const size_t offset_ct);
+        
+        void init_scan_angs(void);
 
         size_t get_scan_ang_ct(void) const { return m_scan_ang_ct; }
         double get_match_scale(void) const { return mscale; }
-        uint8_t get_ang_step(void) const { return m_angcode_ct; }
+        uint8_t get_angcode_ct(void) const { return m_angcode_ct; }
         
-        const std::vector<double>& get_scan_angs(void) const;
+        const std::vector<double>& get_scan_angs(void) const { return scan_angs; }
 
         void preprocess_scan(
             tVecSamples& rvec,
@@ -89,10 +97,10 @@ namespace cpoz
 
     public:
 
-        cv::Mat m_img_scan;
+        cv::Mat m_img_foo;
         //cv::Point m_pt0_scan;
 
-        cv::Mat m_img_template_ang_0;   // 0 degree match template for display
+        //cv::Mat m_img_template_ang_0;   // 0 degree match template for display
         cv::Point m_pt0_template_ang_0; // center of 0 degree match template for display
 
         std::list<T_WAYPOINT> m_waypoints;
@@ -108,14 +116,19 @@ namespace cpoz
         cv::Point slam_loc; ///< calculated position
         double slam_ang;    ///< calculated heading
 
-        double mscale;          ///< scale for doing matching
-        uint8_t m_angcode_ct;      ///< angle step for matching
+        double mscale;              ///< scale for doing matching
+        uint8_t m_angcode_ct;       ///< number of angle codes to use
+
+        size_t m_search_ang_ct;
+        double m_search_ang_step;
 
         std::vector<double> scan_angs;          ///< ideal scan angles
         std::vector<double> scan_angs_offsets;  ///< offsets for angle search
         std::vector<std::vector<cv::Point2d>> scan_cos_sin; ///< ideal cos and sin for scan angles
 
         std::vector<cv::Point> tpt0_offset;         ///< center points for all templates
+
+        std::vector<T_TEMPLATE> m_vtemplates;
     };
 }
 

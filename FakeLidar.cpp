@@ -80,20 +80,27 @@ namespace cpoz
         // see if angle overlay array is valid
         bool is_ang_ok = (rvangcode.size() == last_scan.size());
 
+        std::vector<cv::Point> vpts;
+        vpts.resize(last_scan.size());
+        
         for (size_t nn = 0; nn < last_scan.size(); nn++)
         {
             double mag = last_scan[nn];
             int dx = static_cast<int>((jitter_cos_sin[nn].x * mag) + 0.5);
             int dy = static_cast<int>((jitter_cos_sin[nn].y * mag) + 0.5);
+            vpts[nn] = { dx, dy };
 
             // draw ray from real-world position
             // use noisy measurements for angle and length of ray
-            line(rimg, world_pos, { world_pos.x + dx, world_pos.y + dy }, rcolor);
+            line(rimg, world_pos, world_pos + vpts[nn], rcolor);
+        }
 
-            // if angle info has been provided then draw dot and line
-            // representing surface angle at the measurement point
+        for (size_t nn = 0; nn < last_scan.size(); nn++)
+        {
             if (is_ang_ok)
             {
+                // if angle code info has been provided then draw dot and line
+                // representing surface angle at the measurement point
                 // ignore samples with invalid angle code
                 if (rvangcode[nn] != 0xFFU)
                 {
@@ -104,8 +111,8 @@ namespace cpoz
                     double ang = conv * CV_2PI;
                     int iadx = static_cast<int>((cos(ang) * mag) + 0.5);
                     int iady = static_cast<int>((sin(ang) * mag) + 0.5);
-                    Point pt0 = { world_pos.x + dx, world_pos.y + dy };
-                    Point pt1 = { world_pos.x + dx + iadx, world_pos.y + dy + iady };
+                    Point pt0 = world_pos + vpts[nn];
+                    Point pt1 = { pt0.x + iadx, pt0.y + iady };
                     circle(rimg, pt0, 3, { 255, 255, 0 }, -1);
                     line(rimg, pt0, pt1, { 255, 255, 0 }, 2);
                 }
@@ -113,7 +120,7 @@ namespace cpoz
             else
             {
                 // no angle info so just draw a dot
-                circle(rimg, { world_pos.x + dx, world_pos.y + dy }, 3, rcolor, -1);
+                circle(rimg, world_pos + vpts[nn], 3, rcolor, -1);
             }
         }
     }
