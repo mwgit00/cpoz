@@ -37,8 +37,11 @@ namespace cpoz
             cv::Point pt;
             double ang;
             double range;
-            uint32_t flags;
+            uint8_t angcode;
+            bool is_range_ok;
         } T_SAMPLE;
+
+        typedef std::vector<T_SAMPLE> tVecSamples;
 
         typedef struct _T_GHSLAM_WAYPOINT_struct
         {
@@ -51,27 +54,29 @@ namespace cpoz
         virtual ~GHSLAM();
 
         void init_scan_angs(
-            const double deg0,
-            const double deg1,
-            const double step,
             const double offset_step,
             const size_t offset_ct);
 
+        size_t get_scan_ang_ct(void) const { return m_scan_ang_ct; }
         double get_match_scale(void) const { return mscale; }
+        uint8_t get_ang_step(void) const { return m_angcode_ct; }
         
         const std::vector<double>& get_scan_angs(void) const;
 
         void preprocess_scan(
+            tVecSamples& rvec,
+            cv::Rect& rbbox,
             const size_t offset_index,
-            const std::vector<double>& rscan,
-            const double scale = 1.0);
+            const std::vector<double>& rscan);
 
         void draw_preprocessed_scan(
             cv::Mat& rimg,
             cv::Point& rpt0,
+            const GHSLAM::tVecSamples& rvec,
+            const cv::Rect& rbbox,
             const int shrink = 4);
 
-        void update_scan_templates(const std::vector<double>& rscan);
+        void update_match_templates(const std::vector<double>& rscan);
 
         void perform_match(
             const std::vector<double>& rscan,
@@ -85,24 +90,26 @@ namespace cpoz
     public:
 
         cv::Mat m_img_scan;
-        cv::Mat m_img_mask;
-        cv::Mat m_img_grad;
-        cv::Point m_pt0_scan;
+        //cv::Point m_pt0_scan;
 
         cv::Mat m_img_template_ang_0;   // 0 degree match template for display
         cv::Point m_pt0_template_ang_0; // center of 0 degree match template for display
 
         std::list<T_WAYPOINT> m_waypoints;
 
-        std::vector<GHSLAM::T_SAMPLE> m_preproc;
-        cv::Rect m_preproc_bbox;
-
     private:
+
+        size_t m_scan_ang_ct;   ///< number of angles (elements) in a LIDAR scan
+        double m_scan_ang_min;  ///< negative angle from 0 (front)
+        double m_scan_ang_max;  ///< positive angle from 0 (front)
+        double m_scan_ang_step; ///< step between angles in LIDAR scan
+        double m_scan_max_rng;  ///< max range possible from LIDAR
 
         cv::Point slam_loc; ///< calculated position
         double slam_ang;    ///< calculated heading
 
         double mscale;          ///< scale for doing matching
+        uint8_t m_angcode_ct;      ///< angle step for matching
 
         std::vector<double> scan_angs;          ///< ideal scan angles
         std::vector<double> scan_angs_offsets;  ///< offsets for angle search

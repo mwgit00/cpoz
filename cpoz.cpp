@@ -480,13 +480,17 @@ void vroom(void)
         lidar.set_world_ang(botang);
         lidar.run_scan();
 
-        ghslam.preprocess_scan(61 / 2, lidar.get_last_scan());
+        cpoz::GHSLAM::tVecSamples vpreproc;
+        cv::Rect bbox;
+        vpreproc.resize(ghslam.get_scan_ang_ct());
+
+        ghslam.preprocess_scan(vpreproc, bbox, 61 / 2, lidar.get_last_scan());
         
         //if ((ticker % 10) == 0)
         if (is_resync)
         {
             // apply latest scan as new waypoint
-            ghslam.update_scan_templates(lidar.get_last_scan());
+            ghslam.update_match_templates(lidar.get_last_scan());
 
             Point p0 = match_offset;
             Point roffset;
@@ -523,7 +527,7 @@ void vroom(void)
         // get a scaled-down "snapshot" image of current LIDAR scan (gray)
         Mat img_current_scan;
         Point img_current_scan_pt0;
-        ghslam.draw_preprocessed_scan(img_current_scan, img_current_scan_pt0, 3);
+        ghslam.draw_preprocessed_scan(img_current_scan, img_current_scan_pt0, vpreproc, bbox, 3);
 
         // show current LIDAR scan in upper left
         Rect mroi = { {0,0}, img_current_scan.size() };
@@ -537,19 +541,19 @@ void vroom(void)
         // switch to BGR...
         cvtColor(img_viewer, img_viewer_bgr, COLOR_GRAY2BGR);
         
-        std::vector<double> vang;
-        vang.resize(lidar.get_last_scan().size());
-        for (size_t nn = 0; nn < vang.size(); nn++)
+        std::vector<uint8_t> vangcode;
+        vangcode.resize(lidar.get_last_scan().size());
+        for (size_t nn = 0; nn < vangcode.size(); nn++)
         {
-            vang[nn] = ghslam.m_preproc[nn].ang;
-            if (ghslam.m_preproc[nn].flags == 0)
+            vangcode[nn] = vpreproc[nn].angcode;
+            if (!vpreproc[nn].is_range_ok)
             {
-                vang[nn] = -1.0;
+                vangcode[nn] = 0xFFU;
             }
         }
         
         // draw LIDAR scan lines over floorplan
-        lidar.draw_last_scan(img_viewer_bgr, vang, SCA_DKGRAY);
+        lidar.draw_last_scan(img_viewer_bgr, ghslam.get_ang_step(), vangcode, SCA_DKGRAY);
 
         // draw robot position and direction in LIDAR scan in upper left
         circle(img_viewer_bgr, img_current_scan_pt0, 3, SCA_GREEN, -1);

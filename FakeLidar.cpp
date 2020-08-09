@@ -73,11 +73,12 @@ namespace cpoz
 
     void FakeLidar::draw_last_scan(
         cv::Mat& rimg,
-        const std::vector<double>& rvang,
+        const uint8_t angstep,
+        const std::vector<uint8_t>& rvangcode,
         const cv::Scalar& rcolor) const
     {
         // see if angle overlay array is valid
-        bool is_ang_ok = (rvang.size() == last_scan.size());
+        bool is_ang_ok = (rvangcode.size() == last_scan.size());
 
         for (size_t nn = 0; nn < last_scan.size(); nn++)
         {
@@ -93,12 +94,14 @@ namespace cpoz
             // representing surface angle at the measurement point
             if (is_ang_ok)
             {
-                // ignore negative angles
-                if (rvang[nn] >= 0.0)
+                // ignore samples with invalid angle code
+                if (rvangcode[nn] != 0xFFU)
                 {
                     // draw dot with line in direction of angle
                     const double mag = 10.0;
-                    double ang = rvang[nn] * CV_PI / 180.0;
+                    double conv = static_cast<double>(rvangcode[nn]);
+                    conv = conv / static_cast<double>(angstep);
+                    double ang = conv * CV_2PI;
                     int iadx = static_cast<int>((cos(ang) * mag) + 0.5);
                     int iady = static_cast<int>((sin(ang) * mag) + 0.5);
                     Point pt0 = { world_pos.x + dx, world_pos.y + dy };
