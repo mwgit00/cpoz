@@ -98,7 +98,10 @@ namespace cpoz
     public:
 
         cv::Mat m_img_foo;
-        //cv::Point m_pt0_scan;
+        cv::Point m_img_foo_pt;
+        int m_accum_img_halfdim;
+        int m_accum_img_fulldim;
+        int m_accum_bloom_k;
 
         //cv::Mat m_img_template_ang_0;   // 0 degree match template for display
         cv::Point m_pt0_template_ang_0; // center of 0 degree match template for display
@@ -112,6 +115,7 @@ namespace cpoz
         double m_scan_ang_max;  ///< positive angle from 0 (front)
         double m_scan_ang_step; ///< step between angles in LIDAR scan
         double m_scan_max_rng;  ///< max range possible from LIDAR
+        double m_scan_len_thr;
 
         cv::Point slam_loc; ///< calculated position
         double slam_ang;    ///< calculated heading

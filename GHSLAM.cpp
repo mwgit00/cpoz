@@ -58,13 +58,23 @@ namespace cpoz
         slam_loc({ 0, 0 }),
         slam_ang(0.0),
         mscale(0.25),
-        m_angcode_ct(8),
+        m_angcode_ct(240),
         m_search_ang_ct(61),
-        m_search_ang_step(1.0)              // 1 degree between each search step
+        m_search_ang_step(1.0),             // 1 degree between each search step
+        m_accum_img_halfdim(60),
+        m_accum_bloom_k(4)
     {
         tpt0_offset.resize(m_search_ang_ct);
 
         init_scan_angs();
+
+        // threshold for adjacent measurements that are too far from each other
+        // they are likely not on the same surface and can be ignored
+        // the threshold is distance between two measurements at max LIDAR range
+        m_scan_len_thr = m_scan_max_rng * tan(m_scan_ang_step * CV_PI / 180.0);
+
+        // init width/height of accumulator image
+        m_accum_img_fulldim = (m_accum_img_halfdim + m_accum_bloom_k) * 2 + 1;
     }
     
     
@@ -144,9 +154,6 @@ namespace cpoz
             rbbox = Rect(ptmin, ptmax);
 
             // check for adjacent points that are too far away from each other
-            // they are likely not on the same surface and can be ignored
-            // the threshold is distance between two measurements at max LIDAR range
-            const double len_thr = m_scan_max_rng * tan(m_scan_ang_step * CV_PI / 180.0);
             for (size_t nn = 0; nn < rvec.size(); nn++)
             {
                 // look at 3 neighboring points
@@ -175,7 +182,8 @@ namespace cpoz
                 // apply range threshold
                 double rn = sqrt((vn0.x * vn0.x) + (vn0.y * vn0.y));
                 double rp = sqrt((v0p.x * v0p.x) + (v0p.y * v0p.y));
-                rvec[nn].is_range_ok = ((rp < len_thr) && (rn < len_thr));
+                rvec[nn].is_range_ok = ((rp < m_scan_len_thr) && (rn < m_scan_len_thr));
+                //rvec[nn].is_range_ok = (rp < m_scan_len_thr);
             }
         }
     }
@@ -268,19 +276,20 @@ namespace cpoz
         cv::Rect bbox;
         vsamp.resize(m_scan_ang_ct);
 
-        const int BLOOM_BOUNDS = 50;
-        const int BLOOM_SIZE = 2;
-        const int BLOOM_PAD = BLOOM_BOUNDS + BLOOM_SIZE;
-
-        m_img_foo = Mat::zeros(BLOOM_PAD * 2 + 1, BLOOM_PAD * 2 + 1, CV_16U);
-
+        const int BLOOM_PAD = m_accum_img_halfdim + m_accum_bloom_k;
+        const Point boo = { BLOOM_PAD, BLOOM_PAD };
+        
         // use 0 angle
         preprocess_scan(vsamp, bbox, m_search_ang_ct / 2, rscan);
 
-        //for (size_t jj = 0; jj < m_search_ang_ct; jj++)
-        size_t jj = m_search_ang_ct / 2;
+        double qallmax = 0.0;
+        Point qallmaxpt = { 0,0 };
+
+        for (size_t jj = 0; jj < m_search_ang_ct; jj++)
+        //size_t jj = m_search_ang_ct / 2;
         {
             T_TEMPLATE& rt = m_vtemplates[jj];
+            Mat img_acc = Mat::zeros(m_accum_img_fulldim, m_accum_img_fulldim, CV_16U);
 
             for (size_t ii = 0; ii < vsamp.size(); ii++)
             {
@@ -290,30 +299,41 @@ namespace cpoz
                 {
                     for (const auto& rpt : rt.lookup[rs.angcode])
                     {
+                        // translate the vote pt and see
+                        // if it falls in accumulator image
                         Point votept = rs.pt - rpt;
-
-                        if ((abs(votept.x) < BLOOM_BOUNDS) && (abs(votept.y) < BLOOM_BOUNDS))
+                        if ((abs(votept.x) < m_accum_img_halfdim) && (abs(votept.y) < m_accum_img_halfdim))
                         {
                             // bloom
-                            for (int mm = -BLOOM_SIZE; mm <= BLOOM_SIZE; mm++)
+                            for (int mm = -m_accum_bloom_k; mm <= m_accum_bloom_k; mm++)
                             {
-                                for (int nn = -BLOOM_SIZE; nn <= BLOOM_SIZE; nn++)
+                                for (int nn = -m_accum_bloom_k; nn <= m_accum_bloom_k; nn++)
                                 {
-                                    int q = BLOOM_SIZE + 1 - max(abs(nn), abs(mm));
+                                    int q = m_accum_bloom_k + 1 - max(abs(nn), abs(mm));
                                     Point d = { mm, nn };
-                                    Point boo = { BLOOM_PAD, BLOOM_PAD };
                                     Point e = votept + d + boo;
-                                    uint16_t upix = m_img_foo.at<uint16_t>(e);
+                                    uint16_t upix = img_acc.at<uint16_t>(e);
                                     upix += static_cast<uint16_t>(q);
-                                    m_img_foo.at<uint16_t>(e) = upix;
+                                    img_acc.at<uint16_t>(e) = upix;
                                 }
                             }
                         }
                     }
                 }
             }
+
+            double qmax;
+            Point qmaxpt;
+            minMaxLoc(img_acc, nullptr, &qmax, nullptr, &qmaxpt);
+            if (qmax > qallmax)
+            {
+                qallmax = qmax;
+                qallmaxpt = qmaxpt;
+                img_acc.copyTo(m_img_foo);
+            }
         }
 
+        m_img_foo_pt = qallmaxpt;
 #if 0
         // convert scan to an image (no rotation)
         draw_preprocessed_scan(m_img_scan, m_pt0_scan, sz / 2, rscan);

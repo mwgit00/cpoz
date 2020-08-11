@@ -604,7 +604,8 @@ void vroom(void)
 
         Mat img_boo;
         cvtColor(ghslam.m_img_foo, img_boo, COLOR_GRAY2BGR);
-        Rect mroix = { {0,410}, Size(105, 105) };
+        circle(img_boo, ghslam.m_img_foo_pt, 1, { 0,0,255 }, -1);
+        Rect mroix = { {0,410}, Size(ghslam.m_accum_img_fulldim, ghslam.m_accum_img_fulldim) };
         img_boo.copyTo(img_viewer_bgr(mroix));
 
         // show the BGR image
