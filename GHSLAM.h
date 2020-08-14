@@ -58,6 +58,8 @@ namespace cpoz
             std::vector<double> scan;   ///< original scan data
         } T_WAYPOINT;
 
+
+        static void plot_line(const cv::Point& pt0, const cv::Point& pt1, std::list<cv::Point>& rlist);
         
         GHSLAM();
         virtual ~GHSLAM();

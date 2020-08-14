@@ -49,6 +49,45 @@ namespace cpoz
         }
     };
 
+
+    void GHSLAM::plot_line(const cv::Point& pt0, const cv::Point& pt1, std::list<cv::Point>& rlist)
+    {
+        // from Wikipedia
+        int dx = abs(pt1.x - pt0.x);
+        int sx = (pt0.x < pt1.x) ? 1 : -1;
+        int dy = -abs(pt1.y - pt0.y);
+        int sy = (pt0.y < pt1.y) ? 1 : -1;
+        int err = dx + dy;  // error value e_xy
+
+        //rvec.resize(max(dx, -dy) + 1);
+        cv::Point pt = pt0;
+
+        //size_t ix = 0;
+        
+        while (true)
+        {
+            //rvec[ix++] = pt;
+            rlist.push_back(pt);
+
+            if (pt == pt1) break;
+            
+            int e2 = 2 * err;
+            if (e2 >= dy)
+            {
+                // e_xy+e_x > 0
+                err += dy;
+                pt.x += sx;
+            }
+            if (e2 <= dx)
+            {
+                // e_xy+e_y < 0
+                err += dx;
+                pt.y += sy;
+            }
+        }
+    }
+
+    
     GHSLAM::GHSLAM() :
         m_scan_ang_ct(341),                 // 340 degree scan (+1 for 0 degree sample)
         m_scan_ang_min(-170.0),             // 20 degree "blind spot" behind robot
@@ -62,7 +101,7 @@ namespace cpoz
         m_search_ang_ct(61),
         m_search_ang_step(1.0),             // 1 degree between each search step
         m_accum_img_halfdim(60),
-        m_accum_bloom_k(4)
+        m_accum_bloom_k(1)
     {
         tpt0_offset.resize(m_search_ang_ct);
 
@@ -216,16 +255,27 @@ namespace cpoz
         for (size_t nn = 0; nn < rvec.size(); nn++)
         {
             // @TODO -- add an option for this ???
-            if (false)
+            if (true)
             {
-                // draw lines between scan points that meet "closeness" criteria
                 const T_SAMPLE& rsamp0 = rvec[nn];
                 const T_SAMPLE& rsamp1 = rvec[(nn + 1) % pts.size()];
                 Point pt0 = pts[nn];
                 Point pt1 = pts[(nn + 1) % pts.size()];
                 if (rsamp0.is_range_ok && rsamp1.is_range_ok)
                 {
-                    line(rimg, pt0, pt1, 255, 1);
+                    // draw lines between scan points that meet "closeness" criteria
+                    //line(rimg, pt0, pt1, 255, 1);
+                    std::list<Point> vpt;
+                    plot_line(pt0, pt1, vpt);
+                    for (auto& r : vpt)
+                    {
+                        rimg.at<uint8_t>(r) = 255;
+                    }
+                }
+                else
+                {
+                    // just draw a dot
+                    circle(rimg, pts[nn], 0, 255, 1);
                 }
             }
             else
