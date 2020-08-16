@@ -52,25 +52,19 @@ namespace cpoz
 
     void GHSLAM::plot_line(const cv::Point& pt0, const cv::Point& pt1, std::list<cv::Point>& rlist)
     {
-        // from Wikipedia
+        // Bresenham Line Algorithm from Wikipedia
         int dx = abs(pt1.x - pt0.x);
         int sx = (pt0.x < pt1.x) ? 1 : -1;
         int dy = -abs(pt1.y - pt0.y);
         int sy = (pt0.y < pt1.y) ? 1 : -1;
         int err = dx + dy;  // error value e_xy
 
-        //rvec.resize(max(dx, -dy) + 1);
         cv::Point pt = pt0;
 
-        //size_t ix = 0;
-        
-        while (true)
+        while (pt != pt1)
         {
-            //rvec[ix++] = pt;
             rlist.push_back(pt);
 
-            if (pt == pt1) break;
-            
             int e2 = 2 * err;
             if (e2 >= dy)
             {
@@ -85,6 +79,11 @@ namespace cpoz
                 pt.y += sy;
             }
         }
+
+#if 0
+        // pt1 can be appended here if drawing
+        rlist.push_back(pt1);
+#endif
     }
 
     
@@ -97,7 +96,7 @@ namespace cpoz
         slam_loc({ 0, 0 }),
         slam_ang(0.0),
         mscale(0.25),
-        m_angcode_ct(240),
+        m_angcode_ct(8),
         m_search_ang_ct(61),
         m_search_ang_step(1.0),             // 1 degree between each search step
         m_accum_img_halfdim(60),
@@ -162,7 +161,8 @@ namespace cpoz
         tVecSamples& rvec,
         cv::Rect& rbbox,
         const size_t offset_index,
-        const std::vector<double>& rscan)
+        const std::vector<double>& rscan,
+        const double resize)
     {
         // look up the 0 degree cos and sin table
         std::vector<Point2d>& rveccs = scan_cos_sin[offset_index];
@@ -177,11 +177,10 @@ namespace cpoz
             // also determine bounds of the X,Y coordinates
             for (size_t nn = 0; nn < rvec.size(); nn++)
             {
-                double mag = rscan[nn];
+                double mag = rscan[nn] * resize;
                 int dx = static_cast<int>((rveccs[nn].x * mag) + 0.5);
                 int dy = static_cast<int>((rveccs[nn].y * mag) + 0.5);
                 rvec[nn].pt = { dx, dy };
-                rvec[nn].range = mag;
                 
                 ptmax.x = max(ptmax.x, dx);
                 ptmin.x = min(ptmin.x, dx);
@@ -191,7 +190,27 @@ namespace cpoz
 
             // set bounding box around projected points
             rbbox = Rect(ptmin, ptmax);
-
+#if 0
+            // connect the measurement points with lines
+            // if they meet the closeness criteria
+            m_allpts.clear();
+            const int dthr = static_cast<int>(m_scan_len_thr * m_scan_len_thr);
+            for (size_t nn = 0; nn < rvec.size(); nn++)
+            {
+                Point pt0 = rvec[nn].pt;
+                Point pt1 = rvec[(nn + 1) % sz].pt;
+                if (pt0 != pt1)
+                {
+                    // shrink factor may make some points equal to one another
+                    Point dpt = pt1 - pt0;
+                    int rsqu = ((dpt.x * dpt.x) + (dpt.y * dpt.y));
+                    if (rsqu < dthr)
+                    {
+                        plot_line(pt0, pt1, m_allpts);
+                    }
+                }
+            }
+#endif
             // check for adjacent points that are too far away from each other
             for (size_t nn = 0; nn < rvec.size(); nn++)
             {
@@ -240,7 +259,7 @@ namespace cpoz
             (rbbox.width / shrink) + (2 * PAD_BORDER),
             (rbbox.height / shrink) + (2 * PAD_BORDER));
         rimg = Mat::zeros(imgsz, CV_8UC1);
-            
+
         // shift points so they will be centered in image
         std::vector<Point> pts;
         pts.resize(rvec.size());
@@ -283,6 +302,42 @@ namespace cpoz
                 // just draw a dot
                 circle(rimg, pts[nn], 0, 255, 1);
             }
+        }
+
+        // finally note the sensing point in the scan image
+        rpt0 = {
+            ((0 - rbbox.x) / shrink) + PAD_BORDER,
+            ((0 - rbbox.y) / shrink) + PAD_BORDER };
+    }
+
+
+    void GHSLAM::draw_preprocessed_scan_list(
+        cv::Mat& rimg,
+        cv::Point& rpt0,
+        const std::list<cv::Point>& rlist,
+        const cv::Rect& rbbox,
+        const int shrink)
+    {
+        // create image same size as bounding box along with some padding
+        Size imgsz = Size(
+            (rbbox.width / shrink) + (2 * PAD_BORDER),
+            (rbbox.height / shrink) + (2 * PAD_BORDER));
+        rimg = Mat::zeros(imgsz, CV_8UC1);
+
+        // shift points so they will be centered in image
+        std::list<Point> shiftpts;
+        for (auto& r : m_allpts)
+        {
+            Point ptnew = {
+                ((r.x - rbbox.x) / shrink) + PAD_BORDER,
+                ((r.y - rbbox.y) / shrink) + PAD_BORDER };
+            shiftpts.push_back(ptnew);
+        }
+
+        // set pixel at each point
+        for (auto& r : shiftpts)
+        {
+            rimg.at<uint8_t>(r) = 255;
         }
 
         // finally note the sensing point in the scan image

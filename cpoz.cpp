@@ -490,7 +490,7 @@ void vroom(void)
         if (is_resync)
         {
             // apply latest scan as new waypoint
-            ghslam.update_match_templates(lidar.get_last_scan());
+            //ghslam.update_match_templates(lidar.get_last_scan());
 
             Point p0 = match_offset;
             Point roffset;
@@ -508,11 +508,11 @@ void vroom(void)
             slam_offset += roffset;// match_offset;
             slam_angle += match_angle;
 
-            ghslam.m_waypoints.push_back({ slam_offset, slam_angle, lidar.get_last_scan() });
+            //ghslam.m_waypoints.push_back({ slam_offset, slam_angle, lidar.get_last_scan() });
             is_resync = false;
         }
 
-        ghslam.perform_match(lidar.get_last_scan(), match_offset, match_angle);
+        //ghslam.perform_match(lidar.get_last_scan(), match_offset, match_angle);
 
 #if 0
         if ((abs(slam_offset.x) > 3) || (abs(slam_offset.y) > 3) || (abs(slam_angle) > 3.0))
@@ -601,13 +601,13 @@ void vroom(void)
             oss << "  " << std::fixed << std::setprecision(1) << match_angle;
             putText(img_viewer_bgr, oss.str(), { 0, 385 }, FONT_HERSHEY_PLAIN, 2.0, SCA_BLUE, 2);
         }
-
+#if 0
         Mat img_boo;
         cvtColor(ghslam.m_img_foo, img_boo, COLOR_GRAY2BGR);
         circle(img_boo, ghslam.m_img_foo_pt, 1, { 0,0,255 }, -1);
         Rect mroix = { {0,410}, Size(ghslam.m_accum_img_fulldim, ghslam.m_accum_img_fulldim) };
         img_boo.copyTo(img_viewer_bgr(mroix));
-
+#endif
         // show the BGR image
         image_output(img_viewer_bgr);
     }

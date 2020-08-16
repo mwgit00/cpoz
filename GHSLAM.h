@@ -36,12 +36,12 @@ namespace cpoz
         {
             cv::Point pt;
             double ang;
-            double range;
             uint8_t angcode;
             bool is_range_ok;
         } T_SAMPLE;
 
         typedef std::vector<T_SAMPLE> tVecSamples;
+        typedef std::list<T_SAMPLE> tListSamples;
 
         typedef struct _T_TEMPLATE_struct
         {
@@ -77,7 +77,8 @@ namespace cpoz
             tVecSamples& rvec,
             cv::Rect& rbbox,
             const size_t offset_index,
-            const std::vector<double>& rscan);
+            const std::vector<double>& rscan,
+            const double resize = 0.5);
 
         void draw_preprocessed_scan(
             cv::Mat& rimg,
@@ -85,6 +86,13 @@ namespace cpoz
             const GHSLAM::tVecSamples& rvec,
             const cv::Rect& rbbox,
             const int shrink = 4);
+
+        void draw_preprocessed_scan_list(
+            cv::Mat& rimg,
+            cv::Point& rpt0,
+            const std::list<cv::Point>& rlist,
+            const cv::Rect& rbbox,
+            const int shrink);
 
         void update_match_templates(const std::vector<double>& rscan);
 
@@ -109,6 +117,7 @@ namespace cpoz
         cv::Point m_pt0_template_ang_0; // center of 0 degree match template for display
 
         std::list<T_WAYPOINT> m_waypoints;
+        std::list<cv::Point> m_allpts;
 
     private:
 
