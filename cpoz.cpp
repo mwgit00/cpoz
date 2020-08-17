@@ -482,15 +482,14 @@ void vroom(void)
 
         cpoz::GHSLAM::tVecSamples vpreproc;
         cv::Rect bbox;
-        vpreproc.resize(ghslam.get_scan_ang_ct());
 
-        ghslam.preprocess_scan(vpreproc, bbox, 61 / 2, lidar.get_last_scan());
+        ghslam.preprocess_scan_list(vpreproc, bbox, 61 / 2, lidar.get_last_scan());
         
         //if ((ticker % 10) == 0)
         if (is_resync)
         {
             // apply latest scan as new waypoint
-            //ghslam.update_match_templates(lidar.get_last_scan());
+            ghslam.update_match_templates(lidar.get_last_scan());
 
             Point p0 = match_offset;
             Point roffset;
@@ -512,7 +511,7 @@ void vroom(void)
             is_resync = false;
         }
 
-        //ghslam.perform_match(lidar.get_last_scan(), match_offset, match_angle);
+        ghslam.perform_match(lidar.get_last_scan(), match_offset, match_angle);
 
 #if 0
         if ((abs(slam_offset.x) > 3) || (abs(slam_offset.y) > 3) || (abs(slam_angle) > 3.0))
@@ -540,9 +539,10 @@ void vroom(void)
 
         // switch to BGR...
         cvtColor(img_viewer, img_viewer_bgr, COLOR_GRAY2BGR);
-        
+
         // get a copy of the angle codes
         std::vector<uint8_t> vangcode;
+#if 0
         vangcode.resize(lidar.get_last_scan().size());
         for (size_t nn = 0; nn < vangcode.size(); nn++)
         {
@@ -552,6 +552,7 @@ void vroom(void)
                 vangcode[nn] = 0xFFU;
             }
         }
+#endif
         
         // draw LIDAR scan lines over floorplan
         lidar.draw_last_scan(img_viewer_bgr, ghslam.get_angcode_ct(), vangcode, SCA_DKGRAY);
@@ -576,6 +577,7 @@ void vroom(void)
         int angy = static_cast<int>(angd.y * r * 0.8);
         line(img_viewer_bgr, ibotpos, ibotpos + Point{ angx, angy }, SCA_GREEN, 3);
 
+#if 0
         // lastly draw map stuff
         double rescale = 1.0 / ghslam.get_match_scale();
         for (const auto& r : ghslam.get_waypoints())
@@ -585,7 +587,7 @@ void vroom(void)
             qpt.y = static_cast<int>(rescale * qpt.y);
             circle(img_viewer_bgr, qpt + pt_drawing_offset, 4, SCA_BLUE, -1);
         }
-
+#endif
         {
             // print robot position in image
             std::ostringstream oss;
@@ -601,7 +603,7 @@ void vroom(void)
             oss << "  " << std::fixed << std::setprecision(1) << match_angle;
             putText(img_viewer_bgr, oss.str(), { 0, 385 }, FONT_HERSHEY_PLAIN, 2.0, SCA_BLUE, 2);
         }
-#if 0
+#if 1
         Mat img_boo;
         cvtColor(ghslam.m_img_foo, img_boo, COLOR_GRAY2BGR);
         circle(img_boo, ghslam.m_img_foo_pt, 1, { 0,0,255 }, -1);

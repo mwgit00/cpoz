@@ -49,6 +49,25 @@ namespace cpoz
         }
     };
 
+    
+    uint8_t GHSLAM::convert_xy_to_angcode(int x, int y, uint8_t ct)
+    {
+        // convert X,Y to angle in degrees (0-360)
+        double angdeg = atan2(y, x) * 180.0 / CV_PI;
+        angdeg = (angdeg < 0.0) ? angdeg + 360.0 : angdeg;
+
+        // convert angle to a byte code
+        // at 360 the angle code is equal to ct so wrap it back
+        // to angle code 0 to keep angle code in range 0 to (ct - 1)
+        uint8_t angcode = static_cast<uint8_t>((ct * angdeg) / 360.0);
+        if (angcode == ct)
+        {
+            angcode = 0;
+        }
+
+        return angcode;
+    }
+
 
     void GHSLAM::plot_line(const cv::Point& pt0, const cv::Point& pt1, std::list<cv::Point>& rlist)
     {
@@ -95,11 +114,10 @@ namespace cpoz
         m_scan_max_rng(1200.0),             // 12m max range from LIDAR
         slam_loc({ 0, 0 }),
         slam_ang(0.0),
-        mscale(0.25),
         m_angcode_ct(8),
         m_search_ang_ct(61),
         m_search_ang_step(1.0),             // 1 degree between each search step
-        m_accum_img_halfdim(60),
+        m_accum_img_halfdim(30),
         m_accum_bloom_k(1)
     {
         tpt0_offset.resize(m_search_ang_ct);
@@ -156,6 +174,42 @@ namespace cpoz
         }
     }
 
+
+    void GHSLAM::convert_scan_to_pts(
+        std::vector<cv::Point>& rvpts,
+        cv::Rect& rbbox,
+        const size_t offset_index,
+        const std::vector<double>& rscan,
+        const double resize)
+    {
+        // look up the desired cos and sin table
+        std::vector<Point2d>& rveccs = scan_cos_sin[offset_index];
+        
+        rvpts.resize(rscan.size());
+
+        Point ptmin = { INT_MAX, INT_MAX };
+        Point ptmax = { INT_MIN, INT_MIN };
+
+        // project all measurements using ideal measurement angles
+        // also determine bounds of the X,Y coordinates
+        for (size_t nn = 0; nn < rvpts.size(); nn++)
+        {
+            double mag = rscan[nn] * resize;
+            int dx = static_cast<int>((rveccs[nn].x * mag) + 0.5);
+            int dy = static_cast<int>((rveccs[nn].y * mag) + 0.5);
+            rvpts[nn] = { dx, dy };
+
+            ptmax.x = max(ptmax.x, dx);
+            ptmin.x = min(ptmin.x, dx);
+            ptmax.y = max(ptmax.y, dy);
+            ptmin.y = min(ptmin.y, dy);
+        }
+
+        // set bounding box around projected points
+        rbbox = Rect(ptmin, ptmax);
+    }
+
+
     
     void GHSLAM::preprocess_scan(
         tVecSamples& rvec,
@@ -164,85 +218,91 @@ namespace cpoz
         const std::vector<double>& rscan,
         const double resize)
     {
-        // look up the 0 degree cos and sin table
-        std::vector<Point2d>& rveccs = scan_cos_sin[offset_index];
-        const size_t sz = rvec.size();
+        rvec.resize(rscan.size());
         
-        if (rscan.size() == sz)
+        std::vector<Point> vpts;
+        convert_scan_to_pts(vpts, rbbox, offset_index, rscan, resize);
+
+        rvec[0].is_range_ok = false;
+        rvec[rvec.size() - 1].is_range_ok = false;
+
+        const int dthr = static_cast<int>(m_scan_len_thr * m_scan_len_thr);
+
+        for (size_t nn = 1; nn < (rvec.size() - 1); nn++)
         {
-            Point ptmin = { INT_MAX, INT_MAX };
-            Point ptmax = { INT_MIN, INT_MIN };
+            // look at 3 neighboring points
+            Point ptn = vpts[(nn - 1)];
+            Point pt0 = vpts[nn];
+            Point ptp = vpts[(nn + 1)];
 
-            // project all measurements using ideal measurement angles
-            // also determine bounds of the X,Y coordinates
-            for (size_t nn = 0; nn < rvec.size(); nn++)
-            {
-                double mag = rscan[nn] * resize;
-                int dx = static_cast<int>((rveccs[nn].x * mag) + 0.5);
-                int dy = static_cast<int>((rveccs[nn].y * mag) + 0.5);
-                rvec[nn].pt = { dx, dy };
-                
-                ptmax.x = max(ptmax.x, dx);
-                ptmin.x = min(ptmin.x, dx);
-                ptmax.y = max(ptmax.y, dy);
-                ptmin.y = min(ptmin.y, dy);
-            }
+            rvec[nn].pt = pt0;
 
-            // set bounding box around projected points
-            rbbox = Rect(ptmin, ptmax);
-#if 0
-            // connect the measurement points with lines
-            // if they meet the closeness criteria
-            m_allpts.clear();
-            const int dthr = static_cast<int>(m_scan_len_thr * m_scan_len_thr);
-            for (size_t nn = 0; nn < rvec.size(); nn++)
+            // get vectors from ptn to pt0 and pt0 to ptp
+            // add them to get an "average" dx and dy for the 2 vectors
+            Point vn0 = pt0 - ptn;
+            Point v0p = ptp - pt0;
+            Point vsum = vn0 + v0p;
+
+            rvec[nn].angcode = convert_xy_to_angcode(vsum.x, vsum.y, m_angcode_ct);
+
+            // apply range threshold
+            int rn = ((vn0.x * vn0.x) + (vn0.y * vn0.y));
+            int rp = ((v0p.x * v0p.x) + (v0p.y * v0p.y));
+            rvec[nn].is_range_ok = ((rp < dthr) && (rn < dthr));
+        }
+    }
+
+
+    void GHSLAM::preprocess_scan_list(
+        tVecSamples& rvec,
+        cv::Rect& rbbox,
+        const size_t offset_index,
+        const std::vector<double>& rscan,
+        const double resize)
+    {
+        std::list<Point> ptlist;
+        std::list<uint8_t> anglist;
+        std::vector<Point> vpts;
+        convert_scan_to_pts(vpts, rbbox, offset_index, rscan, resize);
+
+        const int dthr = static_cast<int>(m_scan_len_thr * m_scan_len_thr);
+
+        // attempt to connect the measurement points with lines
+        for (size_t nn = 0; nn < (vpts.size() - 1); nn++)
+        {
+            Point pt0 = vpts[nn];
+            Point pt1 = vpts[(nn + 1)];
+
+            // shrink factor may make some points equal to one another
+            // only proceed if points are not equal
+            if (pt0 != pt1)
             {
-                Point pt0 = rvec[nn].pt;
-                Point pt1 = rvec[(nn + 1) % sz].pt;
-                if (pt0 != pt1)
+                Point dpt = pt1 - pt0;
+                int rsqu = ((dpt.x * dpt.x) + (dpt.y * dpt.y));
+                if (rsqu < dthr)
                 {
-                    // shrink factor may make some points equal to one another
-                    Point dpt = pt1 - pt0;
-                    int rsqu = ((dpt.x * dpt.x) + (dpt.y * dpt.y));
-                    if (rsqu < dthr)
+                    // points meet the closeness criteria
+                    uint8_t angcode = convert_xy_to_angcode(dpt.x, dpt.y, m_angcode_ct);
+                    size_t sz = ptlist.size();
+                    plot_line(pt0, pt1, ptlist);
+                    size_t sznew = ptlist.size();
+                    for (; sz < sznew; sz++)
                     {
-                        plot_line(pt0, pt1, m_allpts);
+                        anglist.push_back(angcode);
                     }
                 }
             }
-#endif
-            // check for adjacent points that are too far away from each other
-            for (size_t nn = 0; nn < rvec.size(); nn++)
-            {
-                // look at 3 neighboring points
-                Point ptn = rvec[(nn + sz - 1) % sz].pt;
-                Point pt0 = rvec[nn].pt;
-                Point ptp = rvec[(nn + 1) % sz].pt;
+        }
 
-                // get vectors from ptn to pt0 and pt0 to ptp
-                // add them and take atan2 to get an "average" angle for the 2 vectors
-                Point vn0 = pt0 - ptn;
-                Point v0p = ptp - pt0;
-                Point vsum = vn0 + v0p;
-                double angdeg = atan2(vsum.y, vsum.x) * 180.0 / CV_PI;
-                angdeg = (angdeg < 0.0) ? angdeg + 360.0 : angdeg;
-                rvec[nn].ang = angdeg;
-
-                // convert angle to a byte code
-                // at 360 the angle code is equal to m_angcode_ct so wrap it back
-                // to angle code 0 to keep angle code in range 0 to (m_angcode_ct - 1)
-                rvec[nn].angcode = static_cast<uint8_t>((m_angcode_ct * angdeg) / 360.0);
-                if (rvec[nn].angcode == m_angcode_ct)
-                {
-                    rvec[nn].angcode = 0;
-                }
-
-                // apply range threshold
-                double rn = sqrt((vn0.x * vn0.x) + (vn0.y * vn0.y));
-                double rp = sqrt((v0p.x * v0p.x) + (v0p.y * v0p.y));
-                rvec[nn].is_range_ok = ((rp < m_scan_len_thr) && (rn < m_scan_len_thr));
-                //rvec[nn].is_range_ok = (rp < m_scan_len_thr);
-            }
+        size_t ii = 0;
+        rvec.resize(ptlist.size());
+        for (auto& r : ptlist)
+        {
+            rvec[ii].pt = r;
+            rvec[ii].angcode = anglist.front();
+            rvec[ii].is_range_ok = true;
+            anglist.pop_front();
+            ii++;
         }
     }
 
@@ -274,7 +334,7 @@ namespace cpoz
         for (size_t nn = 0; nn < rvec.size(); nn++)
         {
             // @TODO -- add an option for this ???
-            if (true)
+            if (0)
             {
                 const T_SAMPLE& rsamp0 = rvec[nn];
                 const T_SAMPLE& rsamp1 = rvec[(nn + 1) % pts.size()];
@@ -294,13 +354,13 @@ namespace cpoz
                 else
                 {
                     // just draw a dot
-                    circle(rimg, pts[nn], 0, 255, 1);
+                    rimg.at<uint8_t>(pts[nn]) = 255;
                 }
             }
             else
             {
                 // just draw a dot
-                circle(rimg, pts[nn], 0, 255, 1);
+                rimg.at<uint8_t>(pts[nn]) = 255;
             }
         }
 
@@ -354,8 +414,7 @@ namespace cpoz
         
         for (size_t ii = 0; ii < m_search_ang_ct; ii++)
         {
-            m_vtemplates[ii].vsamp.resize(m_scan_ang_ct);
-            preprocess_scan(m_vtemplates[ii].vsamp, m_vtemplates[ii].bbox, ii, rscan);
+            preprocess_scan_list(m_vtemplates[ii].vsamp, m_vtemplates[ii].bbox, ii, rscan);
             
             m_vtemplates[ii].lookup.resize(m_angcode_ct);
             
@@ -385,7 +444,7 @@ namespace cpoz
         const Point boo = { BLOOM_PAD, BLOOM_PAD };
         
         // use 0 angle
-        preprocess_scan(vsamp, bbox, m_search_ang_ct / 2, rscan);
+        preprocess_scan_list(vsamp, bbox, m_search_ang_ct / 2, rscan);
 
         double qallmax = 0.0;
         Point qallmaxpt = { 0,0 };
@@ -396,7 +455,8 @@ namespace cpoz
             T_TEMPLATE& rt = m_vtemplates[jj];
             Mat img_acc = Mat::zeros(m_accum_img_fulldim, m_accum_img_fulldim, CV_16U);
 
-            for (size_t ii = 0; ii < vsamp.size(); ii++)
+            const size_t STEP = 1;
+            for (size_t ii = 0; ii < vsamp.size(); ii+=STEP)
             {
                 T_SAMPLE& rs = vsamp[ii];
 

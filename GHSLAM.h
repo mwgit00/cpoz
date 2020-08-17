@@ -35,7 +35,6 @@ namespace cpoz
         typedef struct _T_SAMPLE_struct
         {
             cv::Point pt;
-            double ang;
             uint8_t angcode;
             bool is_range_ok;
         } T_SAMPLE;
@@ -59,6 +58,8 @@ namespace cpoz
         } T_WAYPOINT;
 
 
+        static uint8_t convert_xy_to_angcode(int x, int y, uint8_t ct);
+        
         static void plot_line(const cv::Point& pt0, const cv::Point& pt1, std::list<cv::Point>& rlist);
         
         GHSLAM();
@@ -68,10 +69,16 @@ namespace cpoz
         void init_scan_angs(void);
 
         size_t get_scan_ang_ct(void) const { return m_scan_ang_ct; }
-        double get_match_scale(void) const { return mscale; }
         uint8_t get_angcode_ct(void) const { return m_angcode_ct; }
         
         const std::vector<double>& get_scan_angs(void) const { return scan_angs; }
+
+        void convert_scan_to_pts(
+            std::vector<cv::Point>& rvec,
+            cv::Rect& rbbox,
+            const size_t offset_index,
+            const std::vector<double>& rscan,
+            const double resize);
 
         void preprocess_scan(
             tVecSamples& rvec,
@@ -79,6 +86,13 @@ namespace cpoz
             const size_t offset_index,
             const std::vector<double>& rscan,
             const double resize = 0.5);
+
+        void preprocess_scan_list(
+            tVecSamples& rvec,
+            cv::Rect& rbbox,
+            const size_t offset_index,
+            const std::vector<double>& rscan,
+            const double resize = 0.125);
 
         void draw_preprocessed_scan(
             cv::Mat& rimg,
@@ -92,7 +106,7 @@ namespace cpoz
             cv::Point& rpt0,
             const std::list<cv::Point>& rlist,
             const cv::Rect& rbbox,
-            const int shrink);
+            const int shrink = 4);
 
         void update_match_templates(const std::vector<double>& rscan);
 
@@ -131,7 +145,6 @@ namespace cpoz
         cv::Point slam_loc; ///< calculated position
         double slam_ang;    ///< calculated heading
 
-        double mscale;              ///< scale for doing matching
         uint8_t m_angcode_ct;       ///< number of angle codes to use
 
         size_t m_search_ang_ct;
