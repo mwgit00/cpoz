@@ -92,7 +92,7 @@ namespace cpoz
             cv::Rect& rbbox,
             const size_t offset_index,
             const std::vector<double>& rscan,
-            const double resize = 0.125);
+            const double resize = 0.5);
 
         void draw_preprocessed_scan(
             cv::Mat& rimg,
@@ -133,7 +133,7 @@ namespace cpoz
         std::list<T_WAYPOINT> m_waypoints;
         std::list<cv::Point> m_allpts;
 
-    private:
+    public:
 
         size_t m_scan_ang_ct;   ///< number of angles (elements) in a LIDAR scan
         double m_scan_ang_min;  ///< negative angle from 0 (front)
@@ -149,6 +149,8 @@ namespace cpoz
 
         size_t m_search_ang_ct;
         double m_search_ang_step;
+
+        size_t m_search_bin_step;
 
         std::vector<double> scan_angs;          ///< ideal scan angles
         std::vector<double> scan_angs_offsets;  ///< offsets for angle search

@@ -483,7 +483,7 @@ void vroom(void)
         cpoz::GHSLAM::tVecSamples vpreproc;
         cv::Rect bbox;
 
-        ghslam.preprocess_scan_list(vpreproc, bbox, 61 / 2, lidar.get_last_scan());
+        ghslam.preprocess_scan_list(vpreproc, bbox, ghslam.m_search_ang_ct / 2, lidar.get_last_scan());
         
         //if ((ticker % 10) == 0)
         if (is_resync)

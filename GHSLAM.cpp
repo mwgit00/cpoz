@@ -36,6 +36,9 @@ namespace cpoz
 
     const int PAD_BORDER = 25;              // add some space around border of scan images
 
+    constexpr double CONV_RAD2DEG = 180.0 / CV_PI;
+    constexpr double CONV_DEG2RAD = CV_PI / 180.0;
+
     // cheap COTS LIDAR:  8000 samples/s, 2Hz-10Hz ???
 
     class cmpPtByXY
@@ -53,7 +56,7 @@ namespace cpoz
     uint8_t GHSLAM::convert_xy_to_angcode(int x, int y, uint8_t ct)
     {
         // convert X,Y to angle in degrees (0-360)
-        double angdeg = atan2(y, x) * 180.0 / CV_PI;
+        double angdeg = atan2(y, x) * CONV_RAD2DEG;
         angdeg = (angdeg < 0.0) ? angdeg + 360.0 : angdeg;
 
         // convert angle to a byte code
@@ -115,9 +118,10 @@ namespace cpoz
         slam_loc({ 0, 0 }),
         slam_ang(0.0),
         m_angcode_ct(8),
-        m_search_ang_ct(61),
+        m_search_ang_ct(341),
         m_search_ang_step(1.0),             // 1 degree between each search step
-        m_accum_img_halfdim(30),
+        m_search_bin_step(1),
+        m_accum_img_halfdim(20),
         m_accum_bloom_k(1)
     {
         tpt0_offset.resize(m_search_ang_ct);
@@ -127,7 +131,7 @@ namespace cpoz
         // threshold for adjacent measurements that are too far from each other
         // they are likely not on the same surface and can be ignored
         // the threshold is distance between two measurements at max LIDAR range
-        m_scan_len_thr = m_scan_max_rng * tan(m_scan_ang_step * CV_PI / 180.0);
+        m_scan_len_thr = m_scan_max_rng * tan(m_scan_ang_step * CONV_DEG2RAD);
 
         // init width/height of accumulator image
         m_accum_img_fulldim = (m_accum_img_halfdim + m_accum_bloom_k) * 2 + 1;
@@ -166,7 +170,7 @@ namespace cpoz
             
             for (const auto& rang : scan_angs)
             {
-                double ang_rad = (rang + ang_offset) * CV_PI / 180.0;
+                double ang_rad = (rang + ang_offset) * CONV_DEG2RAD;
                 scan_cos_sin.back().push_back(cv::Point2d(cos(ang_rad), sin(ang_rad)));
             }
 
@@ -378,6 +382,7 @@ namespace cpoz
         const cv::Rect& rbbox,
         const int shrink)
     {
+#if 0
         // create image same size as bounding box along with some padding
         Size imgsz = Size(
             (rbbox.width / shrink) + (2 * PAD_BORDER),
@@ -404,6 +409,7 @@ namespace cpoz
         rpt0 = {
             ((0 - rbbox.x) / shrink) + PAD_BORDER,
             ((0 - rbbox.y) / shrink) + PAD_BORDER };
+#endif
     }
 
 
@@ -450,13 +456,11 @@ namespace cpoz
         Point qallmaxpt = { 0,0 };
 
         for (size_t jj = 0; jj < m_search_ang_ct; jj++)
-        //size_t jj = m_search_ang_ct / 2;
         {
             T_TEMPLATE& rt = m_vtemplates[jj];
             Mat img_acc = Mat::zeros(m_accum_img_fulldim, m_accum_img_fulldim, CV_16U);
 
-            const size_t STEP = 1;
-            for (size_t ii = 0; ii < vsamp.size(); ii+=STEP)
+            for (size_t ii = 0; ii < vsamp.size(); ii += m_search_bin_step)
             {
                 T_SAMPLE& rs = vsamp[ii];
 
@@ -469,6 +473,7 @@ namespace cpoz
                         Point votept = rs.pt - rpt;
                         if ((abs(votept.x) < m_accum_img_halfdim) && (abs(votept.y) < m_accum_img_halfdim))
                         {
+#if 0
                             // bloom
                             for (int mm = -m_accum_bloom_k; mm <= m_accum_bloom_k; mm++)
                             {
@@ -482,6 +487,12 @@ namespace cpoz
                                     img_acc.at<uint16_t>(e) = upix;
                                 }
                             }
+#else
+                            Point e = votept + boo;
+                            uint16_t upix = img_acc.at<uint16_t>(e);
+                            upix += 1;// static_cast<uint16_t>(q);
+                            img_acc.at<uint16_t>(e) = upix;
+#endif
                         }
                     }
                 }
