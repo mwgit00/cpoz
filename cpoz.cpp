@@ -480,10 +480,10 @@ void vroom(void)
         lidar.set_world_ang(botang);
         lidar.run_scan();
 
-        cpoz::GHSLAM::tVecSamples vpreproc;
+        cpoz::GHSLAM::tListPreProc list_preproc;
         cv::Rect bbox;
 
-        ghslam.preprocess_scan_list(vpreproc, bbox, ghslam.m_search_ang_ct / 2, lidar.get_last_scan());
+        ghslam.preprocess_scan(list_preproc, bbox, lidar.get_last_scan(), 0);
         
         //if ((ticker % 10) == 0)
         if (is_resync)
@@ -523,10 +523,10 @@ void vroom(void)
         // init image output with source floorplan (gray)
         img_orig.copyTo(img_viewer);
 
-        // get a scaled-down "snapshot" image of current LIDAR scan (gray)
+        // get a "snapshot" image of current LIDAR scan (gray)
         Mat img_current_scan;
         Point img_current_scan_pt0;
-        ghslam.draw_preprocessed_scan(img_current_scan, img_current_scan_pt0, vpreproc, bbox, 3);
+        ghslam.draw_preprocessed_scan(img_current_scan, img_current_scan_pt0, list_preproc, bbox);
 
         // show current LIDAR scan in upper left
         Rect mroi = { {0,0}, img_current_scan.size() };
@@ -555,7 +555,7 @@ void vroom(void)
 #endif
         
         // draw LIDAR scan lines over floorplan
-        lidar.draw_last_scan(img_viewer_bgr, ghslam.get_angcode_ct(), vangcode, SCA_DKGRAY);
+        lidar.draw_last_scan(img_viewer_bgr, ghslam.get_angcode_ct(), SCA_DKGRAY);
 
         // draw robot position and direction in LIDAR scan in upper left
         circle(img_viewer_bgr, img_current_scan_pt0, 3, SCA_GREEN, -1);
@@ -596,7 +596,6 @@ void vroom(void)
             putText(img_viewer_bgr, oss.str(), { 0, 360 }, FONT_HERSHEY_PLAIN, 2.0, SCA_BLACK, 2);
         }
 
-        if (false)
         {
             std::ostringstream oss;
             oss << " MATCH = " << std::setw(4) << match_offset.x << ", " << match_offset.y;

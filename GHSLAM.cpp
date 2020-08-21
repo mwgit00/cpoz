@@ -117,12 +117,12 @@ namespace cpoz
         m_scan_max_rng(1200.0),             // 12m max range from LIDAR
         slam_loc({ 0, 0 }),
         slam_ang(0.0),
-        m_angcode_ct(8),
-        m_search_ang_ct(341),
+        m_search_angcode_ct(8),
+        m_search_ang_ct(360),               // 360 degree search
         m_search_ang_step(1.0),             // 1 degree between each search step
-        m_search_bin_step(1),
+        m_search_bin_decim(1),
         m_accum_img_halfdim(20),
-        m_accum_bloom_k(1)
+        m_accum_bloom_k(0)
     {
         tpt0_offset.resize(m_search_ang_ct);
 
@@ -147,33 +147,29 @@ namespace cpoz
     void GHSLAM::init_scan_angs(void)
     {
         // flush old data
-        scan_angs.clear();
-        scan_angs_offsets.clear();
-        scan_cos_sin.clear();
+        m_scan_angs.clear();
+        m_scan_cos_sin.clear();
 
         // generate ideal scan angles
-        scan_angs.resize(m_scan_ang_ct);
+        m_scan_angs.resize(m_scan_ang_ct);
         double ang = m_scan_ang_min;
         for (size_t ii = 0; ii < m_scan_ang_ct; ii++)
         {
-            scan_angs[ii] = ang;
+            m_scan_angs[ii] = ang;
             ang += m_scan_ang_step;
         }
 
         // generate lookup tables for cosine and sine
-        // for a range of offsets from ideal scan angles
-        double ang_offset = -m_search_ang_step * (m_search_ang_ct / 2);
+        // for a range of offsets from the ideal scan angles
+        double ang_offset = 0.0;
         for (size_t nn = 0; nn < m_search_ang_ct; nn++)
         {
-            scan_angs_offsets.push_back(ang_offset);
-            scan_cos_sin.push_back({});
-            
-            for (const auto& rang : scan_angs)
+            m_scan_cos_sin.push_back({});
+            for (const auto& rang : m_scan_angs)
             {
                 double ang_rad = (rang + ang_offset) * CONV_DEG2RAD;
-                scan_cos_sin.back().push_back(cv::Point2d(cos(ang_rad), sin(ang_rad)));
+                m_scan_cos_sin.back().push_back(cv::Point2d(cos(ang_rad), sin(ang_rad)));
             }
-
             ang_offset += m_search_ang_step;
         }
     }
@@ -182,12 +178,12 @@ namespace cpoz
     void GHSLAM::convert_scan_to_pts(
         std::vector<cv::Point>& rvpts,
         cv::Rect& rbbox,
-        const size_t offset_index,
         const std::vector<double>& rscan,
+        const size_t offset_index,
         const double resize)
     {
         // look up the desired cos and sin table
-        std::vector<Point2d>& rveccs = scan_cos_sin[offset_index];
+        std::vector<Point2d>& rveccs = m_scan_cos_sin[offset_index];
         
         rvpts.resize(rscan.size());
 
@@ -214,70 +210,24 @@ namespace cpoz
     }
 
 
-    
     void GHSLAM::preprocess_scan(
-        tVecSamples& rvec,
+        tListPreProc& rlist,
         cv::Rect& rbbox,
-        const size_t offset_index,
         const std::vector<double>& rscan,
+        const size_t offset_index,
         const double resize)
     {
-        rvec.resize(rscan.size());
-        
         std::vector<Point> vpts;
-        convert_scan_to_pts(vpts, rbbox, offset_index, rscan, resize);
+        convert_scan_to_pts(vpts, rbbox, rscan, offset_index, resize);
 
-        rvec[0].is_range_ok = false;
-        rvec[rvec.size() - 1].is_range_ok = false;
+        const int dthr = static_cast<int>(m_scan_len_thr * m_scan_len_thr * resize);
 
-        const int dthr = static_cast<int>(m_scan_len_thr * m_scan_len_thr);
-
-        for (size_t nn = 1; nn < (rvec.size() - 1); nn++)
-        {
-            // look at 3 neighboring points
-            Point ptn = vpts[(nn - 1)];
-            Point pt0 = vpts[nn];
-            Point ptp = vpts[(nn + 1)];
-
-            rvec[nn].pt = pt0;
-
-            // get vectors from ptn to pt0 and pt0 to ptp
-            // add them to get an "average" dx and dy for the 2 vectors
-            Point vn0 = pt0 - ptn;
-            Point v0p = ptp - pt0;
-            Point vsum = vn0 + v0p;
-
-            rvec[nn].angcode = convert_xy_to_angcode(vsum.x, vsum.y, m_angcode_ct);
-
-            // apply range threshold
-            int rn = ((vn0.x * vn0.x) + (vn0.y * vn0.y));
-            int rp = ((v0p.x * v0p.x) + (v0p.y * v0p.y));
-            rvec[nn].is_range_ok = ((rp < dthr) && (rn < dthr));
-        }
-    }
-
-
-    void GHSLAM::preprocess_scan_list(
-        tVecSamples& rvec,
-        cv::Rect& rbbox,
-        const size_t offset_index,
-        const std::vector<double>& rscan,
-        const double resize)
-    {
-        std::list<Point> ptlist;
-        std::list<uint8_t> anglist;
-        std::vector<Point> vpts;
-        convert_scan_to_pts(vpts, rbbox, offset_index, rscan, resize);
-
-        const int dthr = static_cast<int>(m_scan_len_thr * m_scan_len_thr);
-
-        // attempt to connect the measurement points with lines
         for (size_t nn = 0; nn < (vpts.size() - 1); nn++)
         {
             Point pt0 = vpts[nn];
             Point pt1 = vpts[(nn + 1)];
 
-            // shrink factor may make some points equal to one another
+            // the resize factor may make some points equal to one another
             // only proceed if points are not equal
             if (pt0 != pt1)
             {
@@ -286,27 +236,12 @@ namespace cpoz
                 if (rsqu < dthr)
                 {
                     // points meet the closeness criteria
-                    uint8_t angcode = convert_xy_to_angcode(dpt.x, dpt.y, m_angcode_ct);
-                    size_t sz = ptlist.size();
-                    plot_line(pt0, pt1, ptlist);
-                    size_t sznew = ptlist.size();
-                    for (; sz < sznew; sz++)
-                    {
-                        anglist.push_back(angcode);
-                    }
+                    // so create a line from pt0 to pt1
+                    rlist.push_back(T_PREPROC{});
+                    rlist.back().angcode = convert_xy_to_angcode(dpt.x, dpt.y, m_search_angcode_ct);
+                    plot_line(pt0, pt1, rlist.back().line);
                 }
             }
-        }
-
-        size_t ii = 0;
-        rvec.resize(ptlist.size());
-        for (auto& r : ptlist)
-        {
-            rvec[ii].pt = r;
-            rvec[ii].angcode = anglist.front();
-            rvec[ii].is_range_ok = true;
-            anglist.pop_front();
-            ii++;
         }
     }
 
@@ -314,7 +249,7 @@ namespace cpoz
     void GHSLAM::draw_preprocessed_scan(
         cv::Mat& rimg,
         cv::Point& rpt0,
-        const GHSLAM::tVecSamples& rvec,
+        const GHSLAM::tListPreProc& rlist,
         const cv::Rect& rbbox,
         const int shrink)
     {
@@ -324,47 +259,14 @@ namespace cpoz
             (rbbox.height / shrink) + (2 * PAD_BORDER));
         rimg = Mat::zeros(imgsz, CV_8UC1);
 
-        // shift points so they will be centered in image
-        std::vector<Point> pts;
-        pts.resize(rvec.size());
-        for (size_t nn = 0; nn < rvec.size(); nn++)
+        for (const auto& r : rlist)
         {
-            Point ptnew = {
-                ((rvec[nn].pt.x - rbbox.x) / shrink) + PAD_BORDER,
-                ((rvec[nn].pt.y - rbbox.y) / shrink)  + PAD_BORDER };
-            pts[nn] = ptnew;
-        }
-
-        for (size_t nn = 0; nn < rvec.size(); nn++)
-        {
-            // @TODO -- add an option for this ???
-            if (0)
+            for (const auto& rr : r.line)
             {
-                const T_SAMPLE& rsamp0 = rvec[nn];
-                const T_SAMPLE& rsamp1 = rvec[(nn + 1) % pts.size()];
-                Point pt0 = pts[nn];
-                Point pt1 = pts[(nn + 1) % pts.size()];
-                if (rsamp0.is_range_ok && rsamp1.is_range_ok)
-                {
-                    // draw lines between scan points that meet "closeness" criteria
-                    //line(rimg, pt0, pt1, 255, 1);
-                    std::list<Point> vpt;
-                    plot_line(pt0, pt1, vpt);
-                    for (auto& r : vpt)
-                    {
-                        rimg.at<uint8_t>(r) = 255;
-                    }
-                }
-                else
-                {
-                    // just draw a dot
-                    rimg.at<uint8_t>(pts[nn]) = 255;
-                }
-            }
-            else
-            {
-                // just draw a dot
-                rimg.at<uint8_t>(pts[nn]) = 255;
+                Point ptnew = {
+                    ((rr.x - rbbox.x) / shrink) + PAD_BORDER,
+                    ((rr.y - rbbox.y) / shrink) + PAD_BORDER };
+                rimg.at<uint8_t>(ptnew) = 255;
             }
         }
 
@@ -372,44 +274,6 @@ namespace cpoz
         rpt0 = {
             ((0 - rbbox.x) / shrink) + PAD_BORDER,
             ((0 - rbbox.y) / shrink) + PAD_BORDER };
-    }
-
-
-    void GHSLAM::draw_preprocessed_scan_list(
-        cv::Mat& rimg,
-        cv::Point& rpt0,
-        const std::list<cv::Point>& rlist,
-        const cv::Rect& rbbox,
-        const int shrink)
-    {
-#if 0
-        // create image same size as bounding box along with some padding
-        Size imgsz = Size(
-            (rbbox.width / shrink) + (2 * PAD_BORDER),
-            (rbbox.height / shrink) + (2 * PAD_BORDER));
-        rimg = Mat::zeros(imgsz, CV_8UC1);
-
-        // shift points so they will be centered in image
-        std::list<Point> shiftpts;
-        for (auto& r : m_allpts)
-        {
-            Point ptnew = {
-                ((r.x - rbbox.x) / shrink) + PAD_BORDER,
-                ((r.y - rbbox.y) / shrink) + PAD_BORDER };
-            shiftpts.push_back(ptnew);
-        }
-
-        // set pixel at each point
-        for (auto& r : shiftpts)
-        {
-            rimg.at<uint8_t>(r) = 255;
-        }
-
-        // finally note the sensing point in the scan image
-        rpt0 = {
-            ((0 - rbbox.x) / shrink) + PAD_BORDER,
-            ((0 - rbbox.y) / shrink) + PAD_BORDER };
-#endif
     }
 
 
@@ -417,20 +281,15 @@ namespace cpoz
     {
         m_vtemplates.clear();
         m_vtemplates.resize(m_search_ang_ct);
-        
         for (size_t ii = 0; ii < m_search_ang_ct; ii++)
         {
-            preprocess_scan_list(m_vtemplates[ii].vsamp, m_vtemplates[ii].bbox, ii, rscan);
-            
-            m_vtemplates[ii].lookup.resize(m_angcode_ct);
-            
-            tVecSamples& rvec = m_vtemplates[ii].vsamp;
-            for (size_t jj = 0; jj < rvec.size(); jj++)
+            preprocess_scan(m_vtemplates[ii].list_preproc, m_vtemplates[ii].bbox, rscan, ii);
+            m_vtemplates[ii].lookup.resize(m_search_angcode_ct);
+            for (const auto& r : m_vtemplates[ii].list_preproc)
             {
-                T_SAMPLE& rsamp = rvec[jj];
-                if (rsamp.is_range_ok)
+                for (const auto& rpt : r.line)
                 {
-                    m_vtemplates[ii].lookup[rsamp.angcode].push_back(rsamp.pt);
+                    m_vtemplates[ii].lookup[r.angcode].push_back(rpt);
                 }
             }
         }
@@ -442,35 +301,34 @@ namespace cpoz
         cv::Point& roffset,
         double& rang)
     {
-        tVecSamples vsamp;
+        tListPreProc list_preproc;
         cv::Rect bbox;
-        vsamp.resize(m_scan_ang_ct);
 
         const int BLOOM_PAD = m_accum_img_halfdim + m_accum_bloom_k;
         const Point boo = { BLOOM_PAD, BLOOM_PAD };
         
         // use 0 angle
-        preprocess_scan_list(vsamp, bbox, m_search_ang_ct / 2, rscan);
+        preprocess_scan(list_preproc, bbox, rscan, 0);
 
+        size_t qjjmax = 0U;
         double qallmax = 0.0;
         Point qallmaxpt = { 0,0 };
 
         for (size_t jj = 0; jj < m_search_ang_ct; jj++)
         {
+            // get new template and vote accumulator image
             T_TEMPLATE& rt = m_vtemplates[jj];
             Mat img_acc = Mat::zeros(m_accum_img_fulldim, m_accum_img_fulldim, CV_16U);
 
-            for (size_t ii = 0; ii < vsamp.size(); ii += m_search_bin_step)
+            for (const auto& rpreproc : list_preproc)
             {
-                T_SAMPLE& rs = vsamp[ii];
-
-                if (rs.is_range_ok)
+                for (const auto& rlinept : rpreproc.line)
                 {
-                    for (const auto& rpt : rt.lookup[rs.angcode])
+                    for (const auto& rmatchpt : rt.lookup[rpreproc.angcode])
                     {
                         // translate the vote pt and see
                         // if it falls in accumulator image
-                        Point votept = rs.pt - rpt;
+                        Point votept = rlinept - rmatchpt;
                         if ((abs(votept.x) < m_accum_img_halfdim) && (abs(votept.y) < m_accum_img_halfdim))
                         {
 #if 0
@@ -506,10 +364,12 @@ namespace cpoz
                 qallmax = qmax;
                 qallmaxpt = qmaxpt;
                 img_acc.copyTo(m_img_foo);
+                qjjmax = jj;
             }
         }
 
         m_img_foo_pt = qallmaxpt;
+        rang = static_cast<double>(qjjmax * m_search_ang_step);
 #if 0
         // convert scan to an image (no rotation)
         draw_preprocessed_scan(m_img_scan, m_pt0_scan, sz / 2, rscan);

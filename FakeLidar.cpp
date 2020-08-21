@@ -74,12 +74,8 @@ namespace cpoz
     void FakeLidar::draw_last_scan(
         cv::Mat& rimg,
         const uint8_t angstep,
-        const std::vector<uint8_t>& rvangcode,
         const cv::Scalar& rcolor) const
     {
-        // see if angle overlay array is valid
-        bool is_ang_ok = (rvangcode.size() == last_scan.size());
-
         std::vector<cv::Point> vpts;
         vpts.resize(last_scan.size());
         
@@ -93,35 +89,7 @@ namespace cpoz
             // draw ray from real-world position
             // use noisy measurements for angle and length of ray
             line(rimg, world_pos, world_pos + vpts[nn], rcolor);
-        }
-
-        for (size_t nn = 0; nn < last_scan.size(); nn++)
-        {
-            if (is_ang_ok)
-            {
-                // if angle code info has been provided then draw dot and line
-                // representing surface angle at the measurement point
-                // ignore samples with invalid angle code
-                if (rvangcode[nn] != 0xFFU)
-                {
-                    // draw dot with line in direction of angle
-                    const double mag = 10.0;
-                    double conv = static_cast<double>(rvangcode[nn]);
-                    conv = conv / static_cast<double>(angstep);
-                    double ang = conv * CV_2PI;
-                    int iadx = static_cast<int>((cos(ang) * mag) + 0.5);
-                    int iady = static_cast<int>((sin(ang) * mag) + 0.5);
-                    Point pt0 = world_pos + vpts[nn];
-                    Point pt1 = { pt0.x + iadx, pt0.y + iady };
-                    circle(rimg, pt0, 3, { 255, 255, 0 }, -1);
-                    line(rimg, pt0, pt1, { 255, 255, 0 }, 2);
-                }
-            }
-            else
-            {
-                // no angle info so just draw a dot
-                circle(rimg, world_pos + vpts[nn], 3, rcolor, -1);
-            }
+            circle(rimg, world_pos + vpts[nn], 3, rcolor, -1);
         }
     }
 

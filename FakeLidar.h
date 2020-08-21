@@ -48,7 +48,6 @@ namespace cpoz
         void draw_last_scan(
             cv::Mat& rimg,
             const uint8_t angstep,
-            const std::vector<uint8_t>& rvangcode,
             const cv::Scalar& rcolor) const;
 
         const std::vector<double>& get_last_scan(void) const { return last_scan; }

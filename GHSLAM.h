@@ -32,25 +32,24 @@ namespace cpoz
     {
     public:
 
-        typedef struct _T_SAMPLE_struct
+        typedef struct
         {
-            cv::Point pt;
             uint8_t angcode;
-            bool is_range_ok;
-        } T_SAMPLE;
+            std::list<cv::Point> line;
+        } T_PREPROC;
 
-        typedef std::vector<T_SAMPLE> tVecSamples;
-        typedef std::list<T_SAMPLE> tListSamples;
+        typedef std::list<T_PREPROC> tListPreProc;
 
-        typedef struct _T_TEMPLATE_struct
+        
+        typedef struct
         {
-            tVecSamples vsamp;
+            tListPreProc list_preproc;
             cv::Rect bbox;
             std::vector<std::list<cv::Point>> lookup;
         } T_TEMPLATE;
 
         
-        typedef struct _T_GHSLAM_WAYPOINT_struct
+        typedef struct
         {
             cv::Point pt;               ///< best-guess location of scan
             double ang;                 ///< best-guress orientation of scan
@@ -69,44 +68,30 @@ namespace cpoz
         void init_scan_angs(void);
 
         size_t get_scan_ang_ct(void) const { return m_scan_ang_ct; }
-        uint8_t get_angcode_ct(void) const { return m_angcode_ct; }
+        uint8_t get_angcode_ct(void) const { return m_search_angcode_ct; }
         
-        const std::vector<double>& get_scan_angs(void) const { return scan_angs; }
+        const std::vector<double>& get_scan_angs(void) const { return m_scan_angs; }
 
         void convert_scan_to_pts(
             std::vector<cv::Point>& rvec,
             cv::Rect& rbbox,
-            const size_t offset_index,
             const std::vector<double>& rscan,
+            const size_t offset_index,
             const double resize);
 
         void preprocess_scan(
-            tVecSamples& rvec,
+            tListPreProc& rlist,
             cv::Rect& rbbox,
-            const size_t offset_index,
             const std::vector<double>& rscan,
-            const double resize = 0.5);
-
-        void preprocess_scan_list(
-            tVecSamples& rvec,
-            cv::Rect& rbbox,
             const size_t offset_index,
-            const std::vector<double>& rscan,
-            const double resize = 0.5);
+            const double resize = 0.25);
 
         void draw_preprocessed_scan(
             cv::Mat& rimg,
             cv::Point& rpt0,
-            const GHSLAM::tVecSamples& rvec,
+            const GHSLAM::tListPreProc& rlist,
             const cv::Rect& rbbox,
-            const int shrink = 4);
-
-        void draw_preprocessed_scan_list(
-            cv::Mat& rimg,
-            cv::Point& rpt0,
-            const std::list<cv::Point>& rlist,
-            const cv::Rect& rbbox,
-            const int shrink = 4);
+            const int shrink = 1);
 
         void update_match_templates(const std::vector<double>& rscan);
 
@@ -145,16 +130,15 @@ namespace cpoz
         cv::Point slam_loc; ///< calculated position
         double slam_ang;    ///< calculated heading
 
-        uint8_t m_angcode_ct;       ///< number of angle codes to use
+        uint8_t m_search_angcode_ct;       ///< number of angle codes to use
 
         size_t m_search_ang_ct;
         double m_search_ang_step;
 
-        size_t m_search_bin_step;
+        size_t m_search_bin_decim;  ///< decimation step size for search
 
-        std::vector<double> scan_angs;          ///< ideal scan angles
-        std::vector<double> scan_angs_offsets;  ///< offsets for angle search
-        std::vector<std::vector<cv::Point2d>> scan_cos_sin; ///< ideal cos and sin for scan angles
+        std::vector<double> m_scan_angs;    ///< ideal scan angles
+        std::vector<std::vector<cv::Point2d>> m_scan_cos_sin; ///< ideal cos and sin for scan angles
 
         std::vector<cv::Point> tpt0_offset;         ///< center points for all templates
 
