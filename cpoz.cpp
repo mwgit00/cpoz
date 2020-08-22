@@ -39,8 +39,6 @@
 #include "CameraHelper.h"
 #include "XYZLandmark.h"
 
-#include "FakeLidar.h"
-#include "GHSLAM.h"
 
 using namespace cv;
 
@@ -57,23 +55,9 @@ using namespace cv;
 #define SCA_DKGRAY  (cv::Scalar(64,64,64))
 
 
-// rotation velocity settings corresponding to keypresses (degrees per frame)
-static const std::vector<double> g_velcomp = {
--2.0, -1.5, -0.7, -0.2,
- 0.0,
- 0.2,  0.7,  1.5,  2.0,
- 0.0, };
-
-#define RO_VEL_FORWARD  (4)
-#define RO_VEL_STOP     (9)
-
-
 
 static bool is_rec_enabled = false;
 static bool is_loc_enabled = false;
-static int iivel = RO_VEL_STOP;
-static bool is_resync = true;   // resync map (do on first iteration)
-static bool is_rehome = true;   // new position (do on first iteration)
 const char * stitle = "CPOZ Test Application";
 int n_record_ctr = 0;
 
@@ -163,18 +147,6 @@ bool wait_and_check_keys(const int delay_ms = 1)
             {
             case 'r': is_rec_enabled = !is_rec_enabled; std::cout << "REC\n"; break;
             //case 'l': is_loc_enabled = !is_loc_enabled; std::cout << "LOC\n"; break;
-            case 'a': iivel = 0; break;
-            case 's': iivel = 1; break; 
-            case 'd': iivel = 2; break;
-            case 'f': iivel = 3; break;
-            case 'g': iivel = 4; break;
-            case 'h': iivel = 5; break;
-            case 'j': iivel = 6; break;
-            case 'k': iivel = 7; break;
-            case 'l': iivel = 8; break;
-            case 'b': iivel = 9; break;
-            case '=': is_resync = true; break;
-            case '0': is_rehome = true; break;
             default: break;
             }
         }
@@ -363,262 +335,6 @@ void loop(void)
 }
 
 
-static cv::Point2d get_cos_sin(const double ang_deg)
-{
-    double c = cos(ang_deg * CV_PI / 180.0);
-    double s = sin(ang_deg * CV_PI / 180.0);
-    return { c, s };
-}
-
-
-void vroom(void)
-{
-    Mat img_orig;
-    Mat img_viewer;
-    Mat img_viewer_bgr;
-    int ticker = 0;
-
-    cpoz::GHSLAM ghslam;
-    cpoz::FakeLidar lidar;
-
-    Point slam_offset = { 0,0 };
-    double slam_angle = 0.0;
-
-    Point match_offset = { 0, 0 };
-    double match_angle = 0.0;
-
-    // various starting positions in default floorplan
-    std::vector<Point2d> vhomepos;
-    vhomepos.push_back({ 560.0, 360.0 });
-    vhomepos.push_back({ 560.0, 540.0 });
-    vhomepos.push_back({ 650.0, 140.0 });
-    vhomepos.push_back({ 870.0, 360.0 });
-    vhomepos.push_back({ 930.0, 630.0 });
-    vhomepos.push_back({ 1040.0, 110.0 });
-    vhomepos.push_back({ 1180.0, 440.0 });
-    size_t iivhomepos = 0;
-
-    // robot state
-    Point2d botpos = { 0.0, 0.0 };
-    double botang = 0.0;
-    Point2d botvel = { 0.0, 0.0 };
-    double botvelmag = 0.0;
-    double botangvel = 0.0;
-
-    Point pt_drawing_offset;
-
-#if 0
-    // really noisy LIDAR
-    lidar.jitter_angle_deg_u = 0.5;
-    lidar.jitter_range_cm_u = 4.0;
-    lidar.jitter_sync_deg_u = 0.5;
-#endif
-
-    lidar.set_scan_angs(ghslam.get_scan_angs());
-    lidar.load_floorplan(".\\docs\\apt_1cmpp_720p.png");
-
-    img_orig = imread(".\\docs\\apt_1cmpp_720p.png", IMREAD_GRAYSCALE);
-
-    // and the processing loop is running...
-    bool is_running = true;
-
-    while (is_running)
-    {
-        // handle keyboard events and end when ESC is pressed
-        is_running = wait_and_check_keys(25);
-
-        if ((iivel == RO_VEL_FORWARD) || (iivel == RO_VEL_STOP))
-        {
-            botvelmag = (iivel == RO_VEL_FORWARD) ? 1.5 : 0.0;
-            botangvel = 0.0;
-        }
-        else
-        {
-            // spin in place
-            botvelmag = 0.0;
-            botangvel = g_velcomp[iivel];
-        }
-
-        Point2d dpos = get_cos_sin(botang) * botvelmag;
-        botpos += dpos;
-        botang += botangvel;
-        if (botang >= 360.0) botang -= 360.0;
-        if (botang < 0.0) botang += 360.0;
-
-        if (is_rehome)
-        {
-            // one-shot keypress
-            is_rehome = false;
-
-            // reset offset for drawing map info
-            pt_drawing_offset = {
-                static_cast<int>(vhomepos[iivhomepos].x),
-                static_cast<int>(vhomepos[iivhomepos].y) };
-            
-            // clear map and start at 0
-            // and set flag for a resync to add first waypoint to new map
-            ghslam.m_waypoints.clear();
-            slam_offset = { 0,0 };
-            slam_angle = 0.0;
-            match_offset = { 0, 0 };
-            match_angle = 0.0;
-            is_resync = true;
-
-            // stop robot
-            iivel = RO_VEL_STOP;
-            botpos = vhomepos[iivhomepos];
-            botang = 0.0;
-            botvel = { 0.0, 0.0 };
-            botvelmag = 0.0;
-            botangvel = 0.0;
-
-            iivhomepos++;
-            if (iivhomepos == vhomepos.size()) iivhomepos = 0;
-        }
-
-        lidar.set_world_pos(botpos);
-        lidar.set_world_ang(botang);
-        lidar.run_scan();
-
-        cpoz::GHSLAM::tListPreProc list_preproc;
-        cv::Rect bbox;
-
-        ghslam.preprocess_scan(list_preproc, bbox, lidar.get_last_scan(), 0);
-        
-        //if ((ticker % 10) == 0)
-        if (is_resync)
-        {
-            // apply latest scan as new waypoint
-            ghslam.update_match_templates(lidar.get_last_scan());
-
-            Point p0 = match_offset;
-            Point roffset;
-            double rang_rad = (slam_angle) * CV_PI / 180.0;
-            double cos0 = cos(rang_rad);
-            double sin0 = sin(rang_rad);
-#if 0
-            roffset.x = static_cast<int>(p0.x * cos0 - p0.y * sin0);
-            roffset.y = static_cast<int>(p0.x * sin0 + p0.y * cos0);
-#else
-            roffset.x = static_cast<int>(p0.x * cos0 + p0.y * sin0);
-            roffset.y = static_cast<int>(-p0.x * sin0 + p0.y * cos0);
-#endif
-
-            slam_offset += roffset;// match_offset;
-            slam_angle += match_angle;
-
-            //ghslam.m_waypoints.push_back({ slam_offset, slam_angle, lidar.get_last_scan() });
-            is_resync = false;
-        }
-
-        ghslam.perform_match(lidar.get_last_scan(), match_offset, match_angle);
-
-#if 0
-        if ((abs(slam_offset.x) > 3) || (abs(slam_offset.y) > 3) || (abs(slam_angle) > 3.0))
-        {
-            is_resync = true;
-        }
-#endif
-
-        // init image output with source floorplan (gray)
-        img_orig.copyTo(img_viewer);
-
-        // get a "snapshot" image of current LIDAR scan (gray)
-        Mat img_current_scan;
-        Point img_current_scan_pt0;
-        ghslam.draw_preprocessed_scan(img_current_scan, img_current_scan_pt0, list_preproc, bbox);
-
-        // show current LIDAR scan in upper left
-        Rect mroi = { {0,0}, img_current_scan.size() };
-        img_current_scan.copyTo(img_viewer(mroi));
-
-        // show latest 0 degree template in middle left
-        //Rect mroi0 = { {0,410}, ghslam.m_img_template_ang_0.size() };
-        //ghslam.m_img_template_ang_0.copyTo(img_viewer(mroi0));
-
-
-        // switch to BGR...
-        cvtColor(img_viewer, img_viewer_bgr, COLOR_GRAY2BGR);
-
-        // get a copy of the angle codes
-        std::vector<uint8_t> vangcode;
-#if 0
-        vangcode.resize(lidar.get_last_scan().size());
-        for (size_t nn = 0; nn < vangcode.size(); nn++)
-        {
-            vangcode[nn] = vpreproc[nn].angcode;
-            if (!vpreproc[nn].is_range_ok)
-            {
-                vangcode[nn] = 0xFFU;
-            }
-        }
-#endif
-        
-        // draw LIDAR scan lines over floorplan
-        lidar.draw_last_scan(img_viewer_bgr, ghslam.get_angcode_ct(), SCA_DKGRAY);
-
-        // draw robot position and direction in LIDAR scan in upper left
-        circle(img_viewer_bgr, img_current_scan_pt0, 3, SCA_GREEN, -1);
-        line(img_viewer_bgr, img_current_scan_pt0, img_current_scan_pt0 + Point{ 10, 0 }, SCA_GREEN, 1);
-#if 0
-        // draw robot position and direction in template in middle left
-        Point t0 = ghslam.m_pt0_template_ang_0 + Point{ 0, 410 };
-        circle(img_viewer_bgr, t0, 3, SCA_GREEN, -1);
-        line(img_viewer_bgr, t0, t0 + Point{ 10, 0 }, SCA_GREEN, 1);
-#endif
-        // now draw robot in floorplan
-        const int r = 20;
-        Point ibotpos = botpos;
-        circle(img_viewer_bgr, ibotpos, r, SCA_WHITE, -1);
-        circle(img_viewer_bgr, ibotpos, r, SCA_BLACK, 1);
-        circle(img_viewer_bgr, ibotpos, 7, SCA_GREEN, -1);
-        Point2d angd = get_cos_sin(botang);
-        int angx = static_cast<int>(angd.x * r * 0.8);
-        int angy = static_cast<int>(angd.y * r * 0.8);
-        line(img_viewer_bgr, ibotpos, ibotpos + Point{ angx, angy }, SCA_GREEN, 3);
-
-#if 0
-        // lastly draw map stuff
-        double rescale = 1.0 / ghslam.get_match_scale();
-        for (const auto& r : ghslam.get_waypoints())
-        {
-            Point qpt = r.pt;
-            qpt.x = static_cast<int>(rescale * qpt.x);
-            qpt.y = static_cast<int>(rescale * qpt.y);
-            circle(img_viewer_bgr, qpt + pt_drawing_offset, 4, SCA_BLUE, -1);
-        }
-#endif
-        {
-            // print robot position in image
-            std::ostringstream oss;
-            oss << " IMG:XY@ = " << std::setw(4) << ibotpos.x << ", " << ibotpos.y;
-            oss << "  " << std::fixed << std::setprecision(1) << botang;
-            putText(img_viewer_bgr, oss.str(), { 0, 360 }, FONT_HERSHEY_PLAIN, 2.0, SCA_BLACK, 2);
-        }
-
-        {
-            std::ostringstream oss;
-            oss << " MATCH = " << std::setw(4) << match_offset.x << ", " << match_offset.y;
-            oss << "  " << std::fixed << std::setprecision(1) << match_angle;
-            putText(img_viewer_bgr, oss.str(), { 0, 385 }, FONT_HERSHEY_PLAIN, 2.0, SCA_BLUE, 2);
-        }
-#if 1
-        Mat img_boo;
-        cvtColor(ghslam.m_img_foo, img_boo, COLOR_GRAY2BGR);
-        circle(img_boo, ghslam.m_img_foo_pt, 1, { 0,0,255 }, -1);
-        Rect mroix = { {0,410}, Size(ghslam.m_accum_img_fulldim, ghslam.m_accum_img_fulldim) };
-        img_boo.copyTo(img_viewer_bgr(mroix));
-#endif
-        // show the BGR image
-        image_output(img_viewer_bgr);
-    }
-
-    // when everything is done, release the capture device and windows
-    cv::destroyAllWindows();
-}
-
-
-
 
 int main()
 {
@@ -627,8 +343,6 @@ int main()
     //cam.cal(".\\calib_02");
     //test_room1();
     //test_room2();
-    //loop();
-
-    vroom();
+    loop();
     return 0;
 }
