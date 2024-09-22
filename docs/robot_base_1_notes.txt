@@ -1,0 +1,10 @@
+Notes for Robot Base #1
+
+5-11/16” is approximately 1/2 of 288mm (length of 11-hole series 1120 channel).
+15/16” is approximately 1/2 of 48mm (height and width of series 1120 channel).
+
+2-1/2” is distance from edge of channel to center point.
+
+Black holes are through-holes for wiring.
+The top *edge* of 2nd hole from top is at the center point.
+Each hole is 1/2” diameter.  Edges of holes are approximately 1/2” apart.
