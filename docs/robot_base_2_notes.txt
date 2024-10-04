@@ -4,6 +4,11 @@ Use #8 1-3/4" screws for mounting wood blocks to channel.
 Channel is 288mm (11-hole series 1120 channel).
 Channel holes may need to be drilled out slightly.
 
-Line up motor mount assembly so corners of wood blocks
-line up with edge of the deck.
+Line up motor mount assembly so outermost corners of wood blocks
+line up with edge of the deck but the motor mount assembly
+remains completely within the deck circle.
 
+Caster is mounted to deck with three screws.  The screw holes
+are in a line parallel to front of base.  They are set back 1" from
+front-facing edge of caster mount.  Middle screw is centered on
+the caster mount.  There is 1" spacing between screws.
