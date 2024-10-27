@@ -1,4 +1,4 @@
-Notes for Robot Base #2
+NOTES FOR ROBOT BASE #2
 
 Use #8 1-3/4" screws for mounting wood blocks to channel.
 Channel is 288mm (11-hole series 1120 channel).
@@ -12,3 +12,42 @@ Caster is mounted to deck with three screws.  The screw holes
 are in a line parallel to front of base.  They are set back 1" from
 front-facing edge of caster mount.  Middle screw is centered on
 the caster mount.  There is 1" spacing between screws.
+
+
+VENT HOLES
+
+Used Actobotics channel to provide hole-drilling pattern.
+
+
+ASYMMETRIC BATTERY BOX PLACEMENT
+
+- Was originally intended to maintain balance with heavy SLA battery in one corner.
+- Made more flat area available for through-holes for wiring.
+  Screw post of box gets in the way if box is centered.
+
+
+RC MOTOR CONTROL
+
+L:  Yel <-> Blk, Blue <-> Red, CH1, [+|-] to red star conn. on rcvr, [S] has heat-shrink strain relief
+R:  Yel <-> Red, Blue <-> Blk, CH2 [S|-], [+] is unused with heat-shrink for protection
+
+Transmitter configured for "hybrid" control of channels 1 and 2.
+Receiver blinks at power-up then goes solid when Transmitter is turned on.
+Then ESCs should beep twice.
+
+
+DISASSEMBLY STEPS
+
+1.  Remove camera.
+2.  Tip so all wheels are off ground and the robot rests on basket handles and tower edge.
+3.  Disconnect motors from ESCs.
+4.  Remove drive train assembly.
+5.  Disconnect ESCs power.  Use screwdriver to pry apart connectors (gently).
+6.  Remove tower by unscrewing all 4 round-head 3/4" wood screws.
+7.  Remove basket.  It blocks battery box screws.
+8.  Remove battery box.
+9.  Remove caster by unscrewing top deck screws.
+10. Take off tower mounting brackets.
+
+Keep fasteners in small container with lid.
+Reverse steps to reassemble.
